@@ -1,0 +1,1586 @@
+/* =========================================
+   ESTILOS GLOBALES Y VARIABLES
+   ========================================= */
+:root {
+    --bg: #0f111a;
+    --card: #1b1d27;
+    --accent: #6a5ce7;
+    --green: #2ed573;
+    --text: #ffffff;
+    --muted: #757b8c;
+    --blanco: #f0f0eb;
+    --negro: #151515;
+    --rojo: #d30000;
+    --tamano: 130px;
+    --bg-main: #0a0b10;
+    --bg-panel: #161821;
+    --accent-purple: #ff0000;
+    --accent-red: #ff4757;
+    --accent-yellow: #f1c40f;
+    --text-muted: #8b92a5;
+    --table-border: #d4af37;
+    --gold: #f5b041;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', sans-serif;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+}
+
+/* =========================================
+   PANTALLA DE CARGA 3D
+   ========================================= */
+#loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: #121212;
+    z-index: 10000;
+    display: none; /* Oculto por defecto */
+    overflow: hidden;
+    transition: opacity 0.5s;
+}
+
+#loading-screen.visible {
+    display: flex;
+}
+
+#loading-screen.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#canvas-container-loading {
+    width: 100vw;
+    height: 100vh;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+}
+
+#loading-screen .loading-text {
+    position: absolute;
+    bottom: 15%;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #ffffff;
+    font-size: 1.5rem;
+    letter-spacing: 5px;
+    z-index: 2;
+    text-transform: uppercase;
+    font-weight: bold;
+    animation: pulse 1.5s infinite;
+}
+
+#loading-screen .vignette {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    box-shadow: 0 0 200px rgba(0,0,0,0.9) inset;
+    z-index: 1;
+    pointer-events: none;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.5; }
+    50% { opacity: 1; }
+    100% { opacity: 0.5; }
+}
+
+/* =========================================
+   LOBBY OVERLAY
+   ========================================= */
+#lobby-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(10px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    transition: opacity 0.3s;
+}
+
+#lobby-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.lobby-box {
+    background: var(--card);
+    padding: 40px;
+    border-radius: 20px;
+    width: 90%;
+    max-width: 380px;
+    border: 1px solid #333;
+    text-align: center;
+    animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.lobby-input {
+    width: 100%;
+    background: #13141c;
+    border: 1px solid #333;
+    padding: 12px;
+    border-radius: 10px;
+    color: white;
+    font-size: 14px;
+    outline: none;
+    margin: 10px 0;
+    box-sizing: border-box;
+}
+
+.btn-act {
+    background: linear-gradient(90deg, #ff0000, #f53);
+    color: white;
+    border: none;
+    padding: 12px;
+    border-radius: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.2s;
+    font-size: 14px;
+}
+
+.btn-act:hover {
+    filter: brightness(1.2);
+    transform: translateY(-2px);
+}
+
+/* =========================================
+   INTERFAZ PRINCIPAL DE JUEGO
+   ========================================= */
+#game-interface {
+    display: none;
+    width: 100vw;
+    height: 100vh;
+}
+
+.sidebar-left {
+    width: 200px;
+    background: #0a0c14;
+    border-right: 1px solid #222;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    float: left;
+    height: 100%;
+}
+
+.main-content {
+    margin-left: 200px;
+    margin-right: 250px;
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #0f111a;
+}
+
+.sidebar-right {
+    width: 250px;
+    background: #0a0c14;
+    border-left: 1px solid #222;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    float: right;
+    height: 100%;
+}
+
+.top-header {
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px solid #222;
+}
+
+.poker-area {
+    flex: 1;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+}
+.table-wrapper{
+  margin:auto;
+  width:650px;
+  height:440px;
+  position:relative;
+  padding-bottom: 30px;
+}
+
+.table-border{
+  position:relative;
+  width:100%;
+  height:100%;
+  padding:14px;
+
+  border-radius:65% / 65%;
+
+  background:
+    radial-gradient(circle at 50% 40%, #3a3a3a, #111 70%),
+    linear-gradient(145deg, #2c2c2c, #0a0a0a);
+
+  box-shadow:
+    0 20px 40px rgba(0,0,0,0.8),        /* sombra exterior */
+    inset 0 6px 10px rgba(255,255,255,0.08), /* brillo superior */
+    inset 0 -15px 25px rgba(0,0,0,0.9), /* sombra inferior */
+    inset 0 0 30px rgba(0,0,0,0.7);
+}
+.table-border::before{
+  content:"";
+  position:absolute;
+  inset:0;
+
+  border-radius:65% / 65%;
+
+  background:linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.15),
+    rgba(255,255,255,0.02) 20%,
+    transparent 40%
+  );
+
+  pointer-events:none;
+}
+.poker-table{
+  width:100%;
+  height:100%;
+  background: radial-gradient(circle at center, #108338, #065c26);
+  border-radius:65% / 65%;
+  border:10px solid #1f1f1f;
+  filter: contrast(110%) brightness(95%);
+  box-shadow:
+    inset 0 10px 30px rgba(0,0,0,0.6),
+    inset 0 -5px 10px rgba(255,255,255,0.1);
+  position:relative;
+}
+
+.poker-table::before{
+  content:"";
+  position:absolute;
+  inset:10px;
+  border-radius:65% / 65%;
+  border:2px solid rgba(255,255,255,0.08);
+}
+
+.pot-container {
+    text-align: center;
+}
+
+.pot-badge {
+    background: #2b1f0e;
+    padding: 8px 20px;
+    border-radius: 30px;
+    border: 2px solid #c9a03d;
+    color: #ffd966;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.poker-chip {
+    width: 25px;
+    height: 25px;
+    background: conic-gradient(#d4af37, #b8860b, #d4af37);
+    border-radius: 50%;
+    border: 2px dashed #fff3;
+}
+
+#community-cards {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    justify-content: center;
+    min-height: 65px;
+}
+
+.action-board {
+    margin-top: 20px;
+    background: #11131f;
+    padding: 20px;
+    border-radius: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.raise-slider {
+    width: 100%;
+    margin: 10px 0;
+}
+
+.quick-bet-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.btn-quick {
+    background: #222533;
+    border: none;
+    color: white;
+    padding: 8px 5px;
+    border-radius: 5px;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.btn-fold { background: #6b2b2b; }
+.btn-call { background: #2b6b4b; }
+.btn-raise { background: #6b4a2b; }
+.btn-allin { background: #4a2b6b; }
+
+#game-logs, #chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    font-size: 12px;
+}
+
+/* =========================================
+   DEPOSIT CARD
+   ========================================= */
+.deposit-card {
+    background: var(--card);
+    padding: 40px;
+    border-radius: 20px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    border: 1px solid #2b2e3d;
+    text-align: center;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2000;
+    display: none;
+}
+
+.deposit-card .logo {
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 30px;
+    color: var(--accent);
+}
+
+.deposit-card .input-group {
+    text-align: left;
+    margin-bottom: 20px;
+}
+
+.deposit-card label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+
+.deposit-card input {
+    width: 100%;
+    background: #13141c;
+    border: 1px solid #333;
+    padding: 12px;
+    border-radius: 10px;
+    color: white;
+    font-size: 16px;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.deposit-card .rate-info {
+    background: rgba(106, 92, 231, 0.1);
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 25px;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.deposit-card .btn-pay {
+    width: 100%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 15px;
+    border-radius: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.2s;
+    font-size: 16px;
+}
+
+.deposit-card .btn-pay:hover { 
+    filter: brightness(1.2); 
+    transform: translateY(-2px); 
+}
+
+.deposit-card .btn-pay:disabled { 
+    background: #444; 
+    cursor: not-allowed; 
+    transform: none; 
+}
+
+.deposit-card #status-msg { 
+    margin-top: 20px; 
+    font-size: 13px; 
+}
+
+.deposit-card .success { 
+    color: var(--green); 
+}
+
+.deposit-card .error { 
+    color: #ff4757; 
+}
+
+/* =========================================
+   LLUVIA DE FICHAS (CSS puro)
+   ========================================= */
+#chip-rain-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 100;
+}
+
+.contenedor-caida {
+    position: absolute;
+    top: -200px;
+    transform-style: preserve-3d;
+    animation: caer linear forwards;
+    will-change: transform; 
+}
+
+.contenedor-rotacion {
+    width: var(--tamano);
+    height: var(--tamano);
+    transform-style: preserve-3d;
+    animation: rotar linear infinite forwards;
+    will-change: transform;
+}
+
+.capa-grosor {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    border-radius: 50%;
+    background: repeating-conic-gradient(
+        from -15deg,
+        var(--negro) 0deg 29.5deg,
+        var(--blanco) 30deg 59.5deg,
+        var(--negro) 60deg
+    );
+    filter: brightness(0.35) contrast(1.1);
+    box-shadow: 0 0 2px rgba(0,0,0,0.9);
+}
+
+.cara {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    border-radius: 50%;
+    background: repeating-conic-gradient(
+        from -15deg,
+        var(--negro) 0deg 29.5deg,
+        var(--blanco) 30deg 59.5deg,
+        var(--negro) 60deg
+    );
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: inset 0 0 0 4px var(--negro), inset 0 0 12px rgba(0,0,0,0.8), 0 0 1px rgba(0,0,0,0.5);
+    backface-visibility: hidden; 
+}
+
+.cara-frente {
+    transform: translateZ(9px);
+}
+
+.cara-dorso {
+    transform: translateZ(-9px) rotateY(180deg) rotateZ(45deg);
+}
+
+.corte-blanco {
+    width: 74%; height: 74%;
+    background-color: var(--blanco);
+    border-radius: 50%;
+    display: flex; justify-content: center; align-items: center;
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.4);
+}
+
+.centro-rojo {
+    width: 82%; height: 82%;
+    background-color: var(--rojo);
+    border-radius: 50%;
+    display: flex; justify-content: center; align-items: center;
+    box-shadow: inset 0 3px 8px rgba(0,0,0,0.7);
+}
+
+.pica {
+    color: var(--blanco);
+    font-size: 55px;
+    line-height: 0;
+    margin-top: -3px;
+    filter: drop-shadow(0px 1px 1px rgba(0,0,0,0.5));
+}
+
+@keyframes caer {
+    0% { transform: translate3d(var(--posX), -300px, var(--posZ)) scale(var(--escala)); }
+    100% { transform: translate3d(var(--posX), 120vh, var(--posZ)) scale(var(--escala)); }
+}
+
+@keyframes rotar {
+    0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+    100% { transform: rotateX(var(--giroX)) rotateY(var(--giroY)) rotateZ(var(--giroZ)); }
+}
+
+
+/* 4. Importante: Asegurar que todo el contenido real quede por encima del tapete */
+.poker-table > * {
+    z-index: 10;
+    position: relative;
+}
+
+.pot-container { position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 10; }
+.pot-badge { background: rgba(0,0,0,0.8); padding: 10px 25px; border-radius: 50px; border: 2px solid var(--gold); color: var(--gold); font-weight: 800; font-size: 18px; display: flex; align-items: center; gap: 10px; transition: 0.3s; }
+
+@keyframes collectPot {
+    0% { transform: scale(1); filter: brightness(1); }
+    50% { transform: scale(1.2); filter: brightness(1.5); box-shadow: 0 0 40px var(--gold); }
+    100% { transform: scale(1); filter: brightness(1); }
+}
+.anim-pot-collect { animation: collectPot 0.6s ease-out; }
+
+.poker-chip { width: 20px; height: 20px; border-radius: 50%; border: 2px dashed rgba(255,255,255,0.6); box-shadow: 0 2px 4px rgba(0,0,0,0.5); display: inline-block;}
+.chip-free { background: radial-gradient(circle, #3498db 40%, #2980b9 100%); }
+.chip-paid { background: radial-gradient(circle, #f1c40f 40%, #d4af37 100%); }
+.chip-stack { position: relative; width: 20px; height: 20px; }
+.chip-stack .poker-chip { position: absolute; left: 0; }
+
+.blind-btn { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #000; font-size: 11px; font-weight: 900; display: flex; justify-content: center; align-items: center; position: absolute; top: -5px; right: -5px; box-shadow: 0 2px 8px rgba(0,0,0,0.8); color: black; z-index: 30; }
+.btn-dealer { background: #ffffff; }
+.btn-sb { background: #ffbe76; }
+.btn-bb { background: #f0932b; color: #fff; }
+
+/* --- SEATS: CAMBIO A DISPOSICIÓN HORIZONTAL --- */
+.seat { 
+    position: absolute; 
+    width: 180px; 
+    display: flex; 
+    flex-direction: row; /* Nombre a la derecha */
+    flex-wrap: wrap;     /* Cartas arriba */
+    align-items: center; 
+    justify-content: center;
+    transition: 0.4s; 
+    z-index: 15;
+}
+
+.seat.pos-0 { bottom: -85px; left: 50%; transform: translateX(-50%); } 
+.seat.pos-1 { bottom: 20px; left: -110px; } 
+.seat.pos-2 { top: 20px; left: -110px; } 
+.seat.pos-3 { top: -155px; left: 50%; transform: translateX(-50%); } /* Más arriba para no tapar el pot */
+.seat.pos-4 { top: 20px; right: -110px; } 
+.seat.pos-5 { bottom: 20px; right: -110px; } 
+
+.player-cards { 
+    width: 100%; 
+    display: flex; 
+    justify-content: center; 
+    gap: -15px; 
+    height: 65px; 
+    margin-bottom: 5px; 
+}
+
+/* --- AVATAR POR ENCIMA DEL NOMBRE --- */
+.avatar-wrapper { 
+    width: 60px; 
+    height: 60px; 
+    border-radius: 50%; 
+    background: #222; 
+    border: 3px solid #555; 
+    position: relative; 
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    z-index: 20; /* Prioridad alta */
+}
+.avatar-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+
+/* Contenedor del nombre (el div que sigue al avatar) */
+.avatar-wrapper + div, 
+.avatar-wrapper + .timer-container + div {
+    margin-left: -15px; /* Solapamiento para que el avatar quede encima */
+    padding-left: 20px;
+    padding-right: 10px;
+    z-index: 10; /* Por debajo del avatar */
+    flex: 1;
+}
+
+.empty-seat-btn { background: rgba(0,0,0,0.6); border: 2px dashed #666; color: #888; width: 60px; height: 60px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 10px; cursor: pointer; transition: 0.2s; font-weight: bold; text-align: center; line-height: 1.1; }
+.empty-seat-btn:hover { border-color: var(--accent-green); color: var(--accent-green); transform: scale(1.1); }
+.empty-seat-btn.locked { cursor: not-allowed; border-color: #333; color: #333; }
+
+.card {
+    width: 48px; height: 68px;
+    background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%);
+    border-radius: 5px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    padding: 5px; font-size: 16px; font-weight: 800;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.4);
+    border: 1px solid #ccc; position: relative;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+.card.red { color: #e74c3c; } 
+.card.blue { color: #3498db; }
+.card.green { color: #27ae60; }
+.card.black { color: #2c3e50; }
+.card.hidden { background: repeating-linear-gradient(45deg, #2c3e50, #2c3e50 5px, #34495e 5px, #34495e 10px); border: 2px solid #fff; color: transparent; }
+
+.card.winner-highlight {
+    border: 3px solid var(--accent-green) !important;
+    box-shadow: 0 0 15px var(--accent-green);
+    transform: translateY(-10px) scale(1.05);
+    z-index: 100;
+}
+
+@keyframes slideInCard {
+    0% { transform: translateX(-30px) scale(0.5); opacity: 0; }
+    100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+.community-card-anim { animation: slideInCard 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
+.action-label {
+    position: absolute; top: -25px; background: var(--accent-purple);
+    color: white; padding: 2px 10px; border-radius: 4px; font-size: 10px;
+    font-weight: bold; text-transform: uppercase; z-index: 30;
+    animation: fadeUpAction 1.5s forwards; pointer-events: none;
+}
+@keyframes fadeUpAction {
+    0% { transform: translateY(0); opacity: 0; }
+    20% { transform: translateY(-15px); opacity: 1; }
+    80% { transform: translateY(-20px); opacity: 1; }
+    100% { transform: translateY(0); opacity: 0; }
+}
+
+/* --- POSICIÓN DE APUESTAS CORREGIDA --- */
+.player-bet { position: absolute; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: bold; color: white; padding: 4px 8px; z-index: 15; transform: scale(0); opacity: 0; transition: 0.3s;}
+.player-bet.visible { transform: scale(1); opacity: 1; }
+
+@keyframes throwBet {
+    0% { transform: translateY(20px) scale(0.5); opacity: 0; }
+    100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+.anim-throw { animation: throwBet 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
+/* Ajustes para que las fichas no queden tapadas por el nuevo layout horizontal */
+.seat.pos-0 .player-bet { bottom: 145px; left: 50%; transform: translateX(-50%); } 
+.seat.pos-1 .player-bet { right: -120px; top: 10px; }
+.seat.pos-2 .player-bet { right: -120px; bottom: 10px; }
+.seat.pos-3 .player-bet { top: 155px; left: 50%; transform: translateX(-50%); }
+.seat.pos-4 .player-bet { left: -120px; bottom: 10px; }
+.seat.pos-5 .player-bet { left: -120px; top: 10px; }
+
+.timer-container { width: 100%; height: 6px; background: #222; border-radius: 3px; margin-top: 5px; overflow: hidden; display: none; }
+.timer-bar { height: 100%; width: 100%; background: var(--accent-green); transition: width 1s linear; }
+.active-turn .timer-container { display: block; }
+.active-turn .avatar-wrapper { border-color: var(--accent-green); box-shadow: 0 0 15px var(--accent-green); }
+
+.action-board { position: absolute; bottom: 20px; right: 20px; background: var(--bg-panel); padding: 20px; border-radius: 20px; border: 1px solid #444; display: flex; flex-direction: column; gap: 12px; width: 340px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); transform: translateY(200%); transition: 0.5s; z-index: 1000; }
+.action-board.active { transform: translateY(0); }
+
+.quick-bet-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 8px; }
+.btn-quick { background: #2a2d3a; border: 1px solid #444; color: #ccc; font-size: 10px; padding: 5px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+.btn-quick:hover { background: #3d4156; color: white; }
+
+.btn-act { flex: 1; padding: 10px 2px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; color: white; transition: 0.2s; font-size: 11px; }
+.btn-fold { background: var(--accent-red); } .btn-call { background: var(--accent-yellow); color: #000; }
+.btn-raise { background: var(--accent-green); color: #000; } .btn-allin { background: linear-gradient(45deg, #c0392b, #ff4757); border: 1px solid #ff9f43; }
+
+.sidebar-left, .sidebar-right { width: 280px; background-color: var(--bg-panel); display: flex; flex-direction: column; z-index: 100; border: 1px solid #222;}
+#game-logs, #chat-messages { flex: 1; padding: 15px; overflow-y: auto; font-size: 12px; }
+.log-entry { padding: 10px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #fd0000; background: rgba(255,255,255,0.03); line-height: 1.4; }
+
+.hand-eval-display {
+    font-size: 12px;
+    color: var(--accent-yellow);
+    font-weight: bold;
+    margin-top: 2px;
+    text-transform: uppercase;
+    text-shadow: 0 0 5px rgba(0,0,0,1);
+}
+
+.leaderboard-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+    font-size: 11px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.leaderboard-row .rank { font-weight: bold; width: 18px; color: var(--text-muted); }
+.leaderboard-row .name { flex: 1; margin-left: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.leaderboard-row .wins { font-weight: bold; color: var(--accent-green); }
+.leaderboard-row:nth-child(1) { border-color: var(--gold); background: rgba(245, 176, 65, 0.1); }
+.leaderboard-row:nth-child(1) .rank { color: var(--gold); }
+.leaderboard-row:nth-child(2) { border-color: #bdc3c7; }
+.leaderboard-row:nth-child(2) .rank { color: #bdc3c7; }
+.leaderboard-row:nth-child(3) { border-color: #cd7f32; }
+.leaderboard-row:nth-child(3) .rank { color: #cd7f32; }
+
+.public-room-card { background: rgba(255,255,255,0.05); border: 1px solid #333; padding: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; transition: 0.2s; }
+.public-room-card:hover { background: rgba(255,255,255,0.1); border-color: var(--accent-red); }
+.room-info-text { text-align: left; }
+.room-name-id { color: white; font-weight: bold; font-size: 13px; display: block; }
+.room-stats { color: #888; font-size: 11px; }
+.btn-join-small { background: linear-gradient(90deg, #ff0000, #f53); border: none; color: white; padding: 5px 12px; border-radius: 5px; font-size: 11px; font-weight: bold; cursor: pointer; }
+
+/* =======================================================================
+   CARTAS COMUNITARIAS Y POZO (POT) MINIMALISTA
+   ======================================================================= */
+
+/* Aseguramos que las cartas estén exactamente en el centro de la mesa */
+#community-cards {
+    position: absolute !important;
+    top: -110%; /* Un poco más arriba del centro exacto */
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 200 !important; 
+    display: flex; 
+    gap: 10px; 
+    justify-content: center;
+    min-height: 75px;
+}
+
+/* El contenedor del pozo va justo debajo de las cartas */
+.pot-container {
+    position: absolute !important;
+    top: 62%; /* Debajo de las cartas (que están en el 42%) */
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 200 !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Quitamos el fondo oscuro y el borde, lo hacemos transparente y minimalista */
+.pot-badge {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0;
+    display: flex;
+    flex-direction: column; /* Apila las fichas arriba y el texto abajo */
+    align-items: center;
+    justify-content: center;
+    gap: 8px; /* Espacio entre las fichas y el texto */
+}
+
+/* Estilo del texto del pozo (Solo BB en blanco con sombra para que resalte en el tapete) */
+#pot-text-content {
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    text-shadow: 0 2px 6px rgba(0,0,0,1), 0 0 2px rgba(0,0,0,0.8);
+}
+.poker-chip { flex-shrink: 0; width: 20px; height: 20px; }
+
+#community-cards { display: flex; gap: 10px; margin-top: 25px; justify-content: center; min-height: 65px; }
+
+/* =======================================================================
+   REDISEÑO HIPERREALISTA: ASIENTOS, AVATARES, PLACAS Y ESTADO ACTIVO
+   ======================================================================= */
+
+/* --- 1. CONTENEDOR PRINCIPAL DEL ASIENTO --- */
+.seat { 
+    position: absolute; 
+    width: 220px; /* Un poco más ancho para la placa física */
+    display: flex; 
+    flex-direction: row; 
+    align-items: center; 
+    justify-content: center;
+    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); 
+    z-index: 15;
+    /* Perspectiva para que las cartas y elementos 3D se comporten bien */
+    perspective: 500px; 
+}
+
+/* --- 2. EL AVATAR: EFECTO LENTE DE CRISTAL Y MARCO METÁLICO --- */
+.avatar-wrapper { 
+    width: 70px; 
+    height: 70px; 
+    border-radius: 50%; 
+    /* Fondo oscuro base */
+    background: #111; 
+    
+    /* Borde de metal cepillado */
+    border: 4px solid transparent;
+    background-clip: padding-box;
+    position: relative; 
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    z-index: 25; 
+    
+    /* Sombra pesada contra el tapete de la mesa */
+    box-shadow: 
+        0 10px 20px rgba(0, 0, 0, 0.8),         /* Sombra exterior pesada */
+        inset 0 0 10px rgba(0, 0, 0, 1),        /* Sombra interior oscureciendo bordes */
+        0 0 0 3px linear-gradient(145deg, #555, #111); /* Anillo metálico falso */
+}
+
+/* Pseudo-elemento para el reflejo de cristal sobre la foto */
+.avatar-wrapper::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    /* Gradiente blanco semitransparente curvo para el brillo del cristal */
+    background: linear-gradient(135deg, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0) 50%, rgba(0,0,0,0.4) 100%);
+    pointer-events: none;
+    box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.3); /* Brillo superior del borde */
+}
+
+.avatar-img { 
+    width: 100%; 
+    height: 100%; 
+    border-radius: 50%; 
+    object-fit: cover; 
+    filter: contrast(1.1) saturate(1.1); /* Hacer que la foto se vea más viva debajo del cristal */
+}
+
+/* --- 3. LA PLACA DE INFORMACIÓN (Nombre y Fichas) --- */
+/* Targeteamos el div que sigue al avatar que contiene nombre y timer */
+.avatar-wrapper + div, 
+.avatar-wrapper + .timer-container + div,
+.player-info-panel { /* Sugiero que le pongas clase, pero mantengo tu selector */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: linear-gradient(to bottom, #2b2e38 0%, #15161c 100%); /* Plástico premium oscuro */
+    border: 1px solid #000;
+    border-radius: 0 12px 12px 0; /* Curvo solo a la derecha */
+    margin-left: -20px; /* Se mete debajo del avatar */
+    padding: 8px 15px 8px 30px; /* Espacio extra a la izquierda por el solapamiento */
+    z-index: 20; 
+    flex: 1;
+    min-width: 130px;
+    height: 50px;
+    
+    /* Bisel 3D de la placa */
+    box-shadow: 
+        inset 0 1px 1px rgba(255, 255, 255, 0.15), /* Luz en el borde superior */
+        inset 0 -1px 2px rgba(0, 0, 0, 0.8),       /* Sombra en el borde inferior */
+        10px 10px 20px rgba(0, 0, 0, 0.6);         /* Sombra de la placa en la mesa */
+}
+
+/* Ajustes de tipografía para parecer grabado / pantalla digital */
+.avatar-wrapper + div b { /* El nombre */
+    font-size: 13px;
+    color: #e0e6ed;
+    text-shadow: -1px -1px 0 rgba(0,0,0,0.8), 1px 1px 0 rgba(255,255,255,0.1); /* Efecto grabado */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.avatar-wrapper + div span { /* El stack / dinero */
+    font-size: 14px;
+    font-weight: 900;
+    color: var(--gold);
+    text-shadow: 0 0 5px rgba(245, 176, 65, 0.4); /* Leve brillo LED */
+    font-family: 'Courier New', monospace; /* Aspecto digital para números */
+    letter-spacing: -0.5px;
+}
+
+/* --- 4. LA BARRA DE TIEMPO (LED incrustado) --- */
+.timer-container { 
+    width: 90%; 
+    height: 6px; 
+    background: #090a0c; /* Hueco oscuro */
+    border-radius: 10px; 
+    margin-top: 4px; 
+    overflow: hidden; 
+    display: none; 
+    /* Efecto de hueco en el plástico */
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.9), inset 0 -1px 1px rgba(255, 255, 255, 0.1);
+}
+.timer-bar { 
+    height: 100%; 
+    width: 100%; 
+    background: linear-gradient(90deg, #10ac84, #1dd1a1); /* LED verde brillante */
+    box-shadow: 0 0 8px #1dd1a1, inset 0 0 2px rgba(255,255,255,0.8); /* Glow interno y externo */
+    transition: width 1s linear, background-color 0.3s; 
+}
+
+/* --- 5. ESTADO ACTIVO (Turno del jugador - Iluminación Neón) --- */
+.active-turn .timer-container { display: block; }
+
+.active-turn .avatar-wrapper { 
+    /* El anillo de metal se ilumina */
+    box-shadow: 
+        0 10px 20px rgba(0, 0, 0, 0.8), 
+        0 0 20px var(--accent-green),
+        inset 0 0 15px var(--accent-green);
+    border-color: #1dd1a1;
+}
+
+.active-turn {
+    /* Toda la placa se levanta ligeramente y brilla */
+    transform: translateY(-5px);
+}
+
+.active-turn .avatar-wrapper + div {
+    /* La placa de plástico se ilumina por debajo */
+    box-shadow: 
+        inset 0 1px 1px rgba(255, 255, 255, 0.15), 
+        inset 0 -1px 2px rgba(0, 0, 0, 0.8),
+        0 15px 30px rgba(0, 0, 0, 0.8),
+        0 0 15px rgba(46, 213, 115, 0.3); /* Luz ambiental en el tapete */
+}
+
+/* --- 6. ASIENTOS VACÍOS (Botones incrustados) --- */
+.empty-seat-btn { 
+    background: linear-gradient(to bottom, #1e2029, #111217);
+    border: 2px solid #333; 
+    color: #666; 
+    width: 70px; 
+    height: 70px; 
+    border-radius: 50%; 
+    display: flex; justify-content: center; align-items: center; 
+    font-size: 11px; font-weight: 800; cursor: pointer; 
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+    text-transform: uppercase; letter-spacing: 1px;
+    /* Botón hundido físicamente */
+    box-shadow: 
+        inset 0 4px 8px rgba(0, 0, 0, 0.8),
+        0 1px 1px rgba(255, 255, 255, 0.1);
+}
+.empty-seat-btn:hover { 
+    border-color: var(--accent-green); 
+    color: #fff; 
+    text-shadow: 0 0 8px var(--accent-green);
+    background: linear-gradient(to bottom, #242b31, #111217);
+    box-shadow: 
+        inset 0 0 15px rgba(46, 213, 115, 0.3),
+        0 1px 1px rgba(255, 255, 255, 0.1);
+}
+.empty-seat-btn.locked { opacity: 0.5; cursor: not-allowed; }
+
+/* --- 7. ETIQUETA DE ACCIÓN (Ej: FOLD, CALL) - Estilo Holográfico/LED --- */
+.action-label {
+    position: absolute; 
+    top: -30px; 
+    left: 45%; /* Centrado respecto a la placa */
+    background: rgba(10, 11, 16, 0.85);
+    border: 1px solid var(--accent-purple);
+    color: #fff; 
+    padding: 4px 12px; 
+    border-radius: 4px; 
+    font-size: 11px; font-weight: 900; 
+    letter-spacing: 1px;
+    text-transform: uppercase; 
+    z-index: 40;
+    box-shadow: 0 0 15px var(--accent-purple), inset 0 0 5px var(--accent-purple);
+    backdrop-filter: blur(4px); /* Si el navegador lo soporta, difumina lo que hay detrás */
+    animation: fadeUpAction 1.8s forwards ease-out; 
+    pointer-events: none;
+}
+
+/* --- 8. CARTAS DEL JUGADOR: Físicamente sobre el tapete --- */
+.player-cards { 
+    position: absolute;
+    width: 100%; 
+    display: flex; 
+    justify-content: center; 
+    gap: -35px; /* Súper superpuestas para realismo */
+    top: -40px; /* Colocadas detrás/arriba de la placa física */
+    z-index: 10; /* DEBAJO de la placa de información (z-index 20) */
+    pointer-events: none;
+}
+
+/* Transformaciones realistas para cada carta */
+.player-cards .card:nth-child(1) {
+    transform: rotate(-8deg) translateX(10px);
+}
+.player-cards .card:nth-child(2) {
+    transform: rotate(5deg) translateY(5px);
+    box-shadow: -3px 3px 10px rgba(0,0,0,0.6); /* Sombra de la carta superior sobre la inferior */
+}
+
+/* Redefiniendo sombra base de las cartas para el tapete */
+.card {
+    box-shadow: 2px 5px 15px rgba(0,0,0,0.7); /* Sombra dura de carta real en tapete */
+    /* ... (Mantén aquí el resto de tus estilos de .card) ... */
+}
+
+/* --- 9. POSICIONAMIENTO EN LA MESA OVALADA --- */
+/* Ajustado considerando que ahora son bloques sólidos más anchos (220px) */
+.seat.pos-0 { bottom: -70px; left: 50%; transform: translateX(-50%); } 
+.seat.pos-1 { bottom: 20px; left: -140px; } /* Más a la izquierda para no pisar la mesa */
+.seat.pos-2 { top: 20px; left: -140px; } 
+.seat.pos-3 { top: -110px; left: 50%; transform: translateX(-50%); } 
+.seat.pos-4 { top: 20px; right: -140px; } 
+.seat.pos-5 { bottom: 20px; right: -140px; } 
+
+/* Si es el turno de la posición 0 o 3 (arriba/abajo), levantamos solo el eje Y */
+.seat.pos-0.active-turn, .seat.pos-3.active-turn { transform: translateX(-50%) translateY(-5px); }
+
+/* --- 10. POSICIÓN DE LA APUESTA DEL JUGADOR (Fichas en la mesa) --- */
+/* Las fichas tienen que verse "lanzadas" hacia la línea dorada */
+
+/* Ajustes exactos para que la apuesta caiga justo dentro del Betting Ring */
+.seat.pos-0 .player-bet { bottom: 110px; left: 50%; transform: translateX(-50%); } 
+.seat.pos-1 .player-bet { right: -140px; top: 10px; }
+.seat.pos-2 .player-bet { right: -140px; bottom: 10px; }
+.seat.pos-3 .player-bet { top: 100px; left: 50%; transform: translateX(-50%); }
+.seat.pos-4 .player-bet { left: -140px; bottom: 10px; }
+.seat.pos-5 .player-bet { left: -140px; top: 10px; }
+
+/* =======================================================================
+   RESTAURACIÓN Y MEJORA HIPERREALISTA DE LAS CARTAS (Mesa y Jugadores)
+   ======================================================================= */
+
+.card {
+    width: 52px; 
+    height: 74px; /* Ligeramente más grandes para mayor realismo */
+    /* Efecto de cartulina plastificada de casino */
+    background: linear-gradient(135deg, #ffffff 0%, #e8e8e8 100%);
+    border-radius: 6px;
+    display: flex; 
+    flex-direction: column; 
+    justify-content: space-between;
+    padding: 4px 6px; 
+    font-size: 17px; 
+    font-weight: 900;
+    
+    /* Borde fino y sombra interior para simular el grosor del naipe */
+    border: 1px solid #999; 
+    box-shadow: 
+        2px 5px 12px rgba(0,0,0,0.8),         /* Sombra proyectada en el tapete */
+        inset 0 0 2px rgba(255,255,255,1);    /* Brillo en el borde de la carta */
+        
+    position: relative;
+    transition: transform 0.3s, box-shadow 0.3s;
+    z-index: 30; /* Aseguramos que siempre queden por encima del tapete */
+}
+
+/* Colores de los palos */
+.card.red { color: #c0392b; } 
+.card.blue { color: #2980b9; }
+.card.green { color: #27ae60; }
+.card.black { color: #2c3e50; }
+
+/* Carta boca abajo (Dorso) */
+.card.hidden { 
+    background: 
+        repeating-linear-gradient(45deg, #1c2833, #1c2833 4px, #2c3e50 4px, #2c3e50 8px); 
+    border: 3px solid #ecf0f1; 
+    color: transparent; 
+    box-shadow: 
+        2px 5px 12px rgba(0,0,0,0.8), 
+        inset 0 0 10px rgba(0,0,0,0.5); /* Sombra interior para la textura */
+}
+
+/* Resaltar cartas ganadoras (Efecto Neón) */
+.card.winner-highlight {
+    border: 2px solid var(--accent-green) !important;
+    box-shadow: 
+        0 0 20px var(--accent-green), 
+        0 10px 20px rgba(0,0,0,0.8);
+    transform: translateY(-10px) scale(1.05);
+    z-index: 100;
+}
+
+/* Animación de cuando el Dealer tira las cartas a la mesa */
+@keyframes slideInCard {
+    0% { transform: translateX(-40px) translateY(-20px) scale(0.6) rotate(-15deg); opacity: 0; }
+    100% { transform: translateX(0) translateY(0) scale(1) rotate(0deg); opacity: 1; }
+}
+
+.community-card-anim { 
+    animation: slideInCard 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; 
+}
+
+/* Ajuste z-index para que el contenedor del POT y las comunitarias no queden bajo la mesa */
+.pot-container {
+    z-index: 50; 
+}
+
+/* =======================================================================
+   DISEÑO DE CARTAS PROFESIONALES (PALO GIGANTE EN EL CENTRO)
+   ======================================================================= */
+
+.card {
+    width: 56px; 
+    height: 80px; /* Un poco más altas para que quepa el diseño clásico */
+    background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%);
+    border-radius: 6px;
+    border: 1px solid #999; 
+    box-shadow: 
+        2px 5px 12px rgba(0,0,0,0.8), 
+        inset 0 0 2px rgba(255,255,255,1);
+    position: relative;
+    transition: transform 0.3s, box-shadow 0.3s;
+    z-index: 30;
+    display: block; /* Quitamos el flex para usar posiciones absolutas */
+    font-family: 'Arial', sans-serif; /* Arial es mejor para los números de las cartas */
+}
+
+/* Colores de los palos */
+.card.red { color: #d63031; } 
+.card.blue { color: #0984e3; }
+.card.green { color: #00b894; }
+.card.black { color: #2d3436; }
+
+/* Esquinas de la carta (Número y palo pequeño) */
+.card-corner {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 0.9;
+}
+
+.card-corner.top-left { top: 4px; left: 4px; }
+.card-corner.bottom-right { bottom: 4px; right: 4px; transform: rotate(180deg); } /* Invertido */
+
+.card-corner .rank { font-size: 15px; font-weight: 900; letter-spacing: -1px; }
+.card-corner .suit { font-size: 12px; }
+
+/* EL PALO GIGANTE EN EL CENTRO */
+.card-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 42px; /* ¡TAMAÑO GIGANTE! */
+    line-height: 1;
+    text-shadow: 1px 1px 0px rgba(255,255,255,0.8); /* Leve relieve */
+}
+
+/* Carta boca abajo (Dorso) */
+.card.hidden { 
+    background: repeating-linear-gradient(45deg, #1c2833, #1c2833 4px, #2c3e50 4px, #2c3e50 8px); 
+    border: 3px solid #ecf0f1; 
+    box-shadow: 2px 5px 12px rgba(0,0,0,0.8), inset 0 0 10px rgba(0,0,0,0.5); 
+}
+/* Ocultar el contenido si la carta está boca abajo */
+.card.hidden * { display: none; }
+
+/* Resaltar cartas ganadoras */
+.card.winner-highlight {
+    border: 2px solid var(--accent-green) !important;
+    box-shadow: 0 0 20px var(--accent-green), 0 10px 20px rgba(0,0,0,0.8);
+    transform: translateY(-10px) scale(1.05);
+    z-index: 100;
+}
+
+/* =======================================================================
+   FICHAS DE CASINO HIPERREALISTAS Y APILAMIENTO (STACKS)
+   ======================================================================= */
+
+.chip-stack {
+    position: relative;
+    width: 28px;
+    /* La altura se calculará dinámicamente en JS según cuántas fichas haya */
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+}
+
+.poker-chip {
+    width: 28px; 
+    height: 28px; 
+    border-radius: 50%; 
+    position: absolute;
+    
+    /* Textura hiperrealista: Centro sólido + Aro interno + Estrías externas */
+    background-image: 
+        radial-gradient(circle at center, var(--chip-bg) 0%, var(--chip-bg) 35%, var(--chip-border) 36%, var(--chip-border) 42%, transparent 43%),
+        repeating-conic-gradient(
+            var(--chip-bg) 0deg 20deg, 
+            var(--chip-accent) 20deg 40deg
+        );
+        
+    border: 1px solid rgba(0,0,0,0.9);
+    
+    /* Efecto 3D de grosor y luz */
+    box-shadow: 
+        inset 0 2px 2px rgba(255,255,255,0.5), /* Luz superior del borde */
+        inset 0 -2px 4px rgba(0,0,0,0.7),      /* Sombra inferior del borde */
+        0 3px 4px rgba(0,0,0,0.8);             /* Sombra proyectada sobre la ficha de abajo */
+        
+    transition: transform 0.3s ease;
+}
+
+/* Valores y Colores Clásicos de Casino */
+.chip-1 {    --chip-bg: #ecf0f1; --chip-accent: #2c3e50; --chip-border: #bdc3c7; } /* Blanco/Gris */
+.chip-5 {    --chip-bg: #e74c3c; --chip-accent: #ffffff; --chip-border: #c0392b; } /* Rojo */
+.chip-25 {   --chip-bg: #2ecc71; --chip-accent: #ffffff; --chip-border: #27ae60; } /* Verde */
+.chip-100 {  --chip-bg: #2c3e50; --chip-accent: #f1c40f; --chip-border: #1a252f; } /* Negro/Oro */
+.chip-500 {  --chip-bg: #9b59b6; --chip-accent: #ffffff; --chip-border: #8e44ad; } /* Púrpura */
+.chip-1000 { --chip-bg: #f1c40f; --chip-accent: #2c3e50; --chip-border: #d4af37; } /* Oro/Negro */
+
+/* Ajuste para el contenedor de la apuesta del jugador */
+.player-bet {
+    display: flex;
+    align-items: flex-end; /* Alinear el texto con la base del stack */
+    gap: 12px;
+    /* ... (mantén el resto de tus estilos de .player-bet) ... */
+}
+
+
+/* =========================================
+           ESCENARIO (SIN FONDO)
+           ========================================= */
+   
+       /* =========================================
+           CONFIGURACIÓN DEL ESPACIO 3D
+           ========================================= */
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+         
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+            /* Profundidad de la cámara. Entre más bajo, más extremo es el 3D */
+            perspective: 800px; 
+            perspective-origin: 50% 50%;
+        }
+
+        :root {
+            --blanco: #f4f4f0;
+            --negro: #151515;
+            --rojo: #d30000;
+            --tamano: 140px;
+        }
+
+        /* Contenedor que solo maneja la CAÍDA (Eje Y) */
+        .contenedor-caida {
+            position: absolute;
+            top: -200px; /* Inician fuera de cámara por arriba */
+            transform-style: preserve-3d;
+            animation: caer linear forwards;
+        }
+
+        /* Contenedor que maneja la ROTACIÓN 3D */
+        .contenedor-rotacion {
+            width: var(--tamano);
+            height: var(--tamano);
+            transform-style: preserve-3d;
+            animation: rotar linear infinite forwards;
+        }
+
+        /* =========================================
+           CONSTRUCCIÓN DEL CILINDRO 3D (GROSOR)
+           ========================================= */
+        .capa-grosor {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            /* El patrón de borde de la ficha */
+            background: repeating-conic-gradient(
+                from -15deg,
+                var(--negro) 0deg 30deg,
+                var(--blanco) 30deg 60deg
+            );
+            /* Oscurecemos el canto para que parezca el borde, no la cara frontal */
+            filter: brightness(0.4) contrast(1.2);
+        }
+
+        /* =========================================
+           CARAS FRONTALES Y TRASERAS
+           ========================================= */
+              body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+            background: radial-gradient(circle at center, #1e5a28 0%, #061708 100%);
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+            perspective: 1000px; /* Profundidad de cámara ajustada */
+            perspective-origin: 50% 50%;
+        }
+
+        :root {
+            --blanco: #f0f0eb;
+            --negro: #151515;
+            --rojo: #d30000;
+            --tamano: 130px;
+        }
+
+        /* Contenedor que maneja la CAÍDA (Eje Y) */
+        .contenedor-caida {
+            position: absolute;
+            top: -200px;
+            transform-style: preserve-3d;
+            animation: caer linear forwards;
+            /* Añadimos un poco de suavidad al renderizado 3D */
+            will-change: transform; 
+        }
+
+        /* Contenedor que maneja la ROTACIÓN 3D */
+        .contenedor-rotacion {
+            width: var(--tamano);
+            height: var(--tamano);
+            transform-style: preserve-3d;
+            animation: rotar linear infinite forwards;
+            will-change: transform;
+        }
+
+        /* =========================================
+           CONSTRUCCIÓN DEL CILINDRO 3D LISO (GROSOR)
+           ========================================= */
+        .capa-grosor {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            /* Patrón con bordes suavizados (0.5deg de transición) para evitar pixelado */
+            background: repeating-conic-gradient(
+                from -15deg,
+                var(--negro) 0deg 29.5deg,
+                var(--blanco) 30deg 59.5deg,
+                var(--negro) 60deg
+            );
+            filter: brightness(0.35) contrast(1.1);
+            
+            /* EL TRUCO MÁGICO PARA BORDES LISOS:
+               Esta sombra minúscula difumina el espacio entre cada capa,
+               eliminando el aspecto "poligonal" y creando un borde sólido. */
+            box-shadow: 0 0 2px rgba(0,0,0,0.9);
+        }
+
+        /* =========================================
+           CARAS FRONTALES Y TRASERAS
+           ========================================= */
+        .cara {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            background: repeating-conic-gradient(
+                from -15deg,
+                var(--negro) 0deg 29.5deg,
+                var(--blanco) 30deg 59.5deg,
+                var(--negro) 60deg
+            );
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            /* Sombra interna para el borde y externa sutil para el anti-aliasing (suavizado) */
+            box-shadow: inset 0 0 0 4px var(--negro), inset 0 0 12px rgba(0,0,0,0.8), 0 0 1px rgba(0,0,0,0.5);
+            backface-visibility: hidden; 
+        }
+
+        /* Ahora las caras tapan exactamente el cilindro de capas densas */
+        .cara-frente {
+            transform: translateZ(9px);
+        }
+        .cara-dorso {
+            transform: translateZ(-9px) rotateY(180deg) rotateZ(45deg);
+        }
+
+        /* Diseño interior (Sticker) */
+        .corte-blanco {
+            width: 74%; height: 74%;
+            background-color: var(--blanco);
+            border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: inset 0 0 8px rgba(0,0,0,0.4);
+        }
+
+        .centro-rojo {
+            width: 82%; height: 82%;
+            background-color: var(--rojo);
+            border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: inset 0 3px 8px rgba(0,0,0,0.7);
+        }
+
+        .pica {
+            color: var(--blanco);
+            font-size: 55px;
+            line-height: 0;
+            margin-top: -3px;
+            filter: drop-shadow(0px 1px 1px rgba(0,0,0,0.5));
+        }
+
+        /* =========================================
+           ANIMACIONES CLAVE (GRAVEDAD LENTA)
+           ========================================= */
+        @keyframes caer {
+            0% { transform: translate3d(var(--posX), -300px, var(--posZ)) scale(var(--escala)); }
+            100% { transform: translate3d(var(--posX), 120vh, var(--posZ)) scale(var(--escala)); }
+        }
+
+        @keyframes rotar {
+            0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+            100% { transform: rotateX(var(--giroX)) rotateY(var(--giroY)) rotateZ(var(--giroZ)); }
+        }
+
+        /* --- ESTILOS DE LA PANTALLA DE CARGA 3D --- */
+#loading-screen {
+    display: none; /* Oculto por defecto */
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: #121212;
+    z-index: 9999; /* Por encima de todo el lobby y el juego */
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+#canvas-container {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+}
+
+.loading-text {
+    position: absolute;
+    bottom: 15%;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #ff0000; /* Color rojo de tu marca */
+    font-size: 1.5rem;
+    letter-spacing: 5px;
+    z-index: 2;
+    text-transform: uppercase;
+    font-weight: bold;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.5; }
+    50% { opacity: 1; }
+    100% { opacity: 0.5; }
+}
+
+.vignette {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    box-shadow: 0 0 200px rgba(0,0,0,0.9) inset;
+    z-index: 1;
+    pointer-events: none;
+}
+/* Eliminar sidebar-left que ya no usamos */
+.sidebar-left {
+    display: none;
+}
+
+/* Ajustar main-content */
+.main-content {
+    margin-left: 0;
+    margin-right: 250px; /* espacio para sidebar-right */
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Hacer que el panel de acciones sea visible */
+.action-board {
+    /* Eliminar position absolute y transform */
+    position: relative;
+    bottom: auto;
+    right: auto;
+    transform: none;
+    margin-top: 20px;
+    width: 100%;
+    max-width: 400px;
+    align-self: center;
+}
+
+/* Ajustar poker-area para centrar la mesa y el panel */
+.poker-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+}
+
+/* Mejorar la mesa */
+.poker-table {
+    width: 800px;
+    height: 400px;
+    margin: 20px auto;
+}
+
+/* Ajustar pot-container */
+.pot-container {
+    position: relative;
+    top: auto;
+    left: auto;
+    transform: none;
+    margin-bottom: 20px;
+}
+
+/* Ajustar community cards */
+#community-cards {
+    position: relative;
+    top: auto;
+    left: auto;
+    transform: none;
+    margin-top: 10px;
+}
+
+/* Botón Home funcional */
+.home-button {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 2000;
+}
