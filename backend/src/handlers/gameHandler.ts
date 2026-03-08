@@ -86,7 +86,10 @@ function broadcastState(io: Server, roomId: string): void {
                     return c.toString(); // fallback
                 }) : [],
                 lastAction: seat.lastAction,
-                actionId: seat.actionId
+                actionId: seat.actionId,
+                // FIX: bestHand e isAllIn necesarios en el cliente
+                bestHand: (seat as any).bestHand || null,
+                isAllIn: seat.isAllIn,
             };
         }),
         gameState: room.gameState,
@@ -97,9 +100,11 @@ function broadcastState(io: Server, roomId: string): void {
         dealerIndex: room.dealerIndex,
         sbIndex: room.sbIndex,
         bbIndex: room.bbIndex,
-        winningCards: [], // Aquí irían las cartas ganadoras cuando se implemente
+        winningCards: [],
         smallBlind: room.smallBlind,
-        bigBlind: room.bigBlind
+        bigBlind: room.bigBlind,
+        board: room.engine.board.map(c => (typeof c === 'string' ? c : c.rank + c.suit)),
+        // BUG FIX 2: Incluir las cartas comunitarias - sin esto el 
     };
     io.to(roomId).emit('gameState', gameState);
     console.log('Enviando gameState para sala', roomId, 'asientos:', room.seats);
@@ -177,10 +182,26 @@ function nextTurn(io: Server, roomId: string) {
     room.turnIndex = nextIdx;
     room.actionInProgress = false;
 
+    // Notificar al jugador cuyo turno es con la info necesaria para el panel
+    const turnSeat = room.seats[nextIdx];
+    if (turnSeat) {
+        const callAmount = Math.max(0, room.currentBet - turnSeat.currentBet);
+        io.to(turnSeat.id).emit('yourTurn', {
+            callAmount,
+            minRaise: room.currentBet + room.minRaise,
+            maxRaise: turnSeat.balance + turnSeat.currentBet,
+            currentBet: room.currentBet
+        });
+    }
+
+    // FIX: emitir timerStart para que la barra visual arranque en el cliente
+    if (turnSeat) {
+        io.to(turnSeat.id).emit('timerStart', { seatIndex: nextIdx, duration: TURN_TIMEOUT });
+    }
+
     // Reiniciamos el timer
     if (room.turnTimer) clearTimeout(room.turnTimer);
     room.turnTimer = setTimeout(() => {
-        // Si el jugador no actúa a tiempo, automáticamente se retira (fold)
         const currentPlayerId = room.seats[room.turnIndex]?.id;
         if (currentPlayerId) {
             handlePlayerAction(io, roomId, currentPlayerId, 'fold', 0);
@@ -230,6 +251,17 @@ function advanceHandStage(io: Server, roomId: string) {
     if (nextStage === 'SHOWDOWN') {
         // Evaluar ganadores
         // Obtener los jugadores ganadores del motor (devuelve objetos Player)
+        // FIX: evaluatePlayer NUNCA se llamaba. score siempre era -1 → todos empataban.
+        const seatedActiveIndices = room.seats.map((s, idx) => s !== null ? idx : -1).filter(idx => idx !== -1);
+        seatedActiveIndices.forEach((seatIdx, engineIdx) => {
+            const seat = room.seats[seatIdx];
+            const enginePlayer = room.engine.players[engineIdx];
+            if (seat && seat.active && enginePlayer) {
+                room.engine.evaluatePlayer(enginePlayer);
+                // Pasar bestHand al seat para que broadcastState lo incluya
+                (seat as any).bestHand = enginePlayer.bestHand;
+            }
+        });
         const winningPlayers = room.engine.determineWinners();
         // Convertirlos a IDs de asiento usando el orden de engine.players y asientos sentados
         const seatedIndices = room.seats.map((s, idx) => (s !== null ? idx : -1)).filter(idx => idx !== -1);
@@ -248,9 +280,13 @@ function advanceHandStage(io: Server, roomId: string) {
 
     room.handState = nextStage;
     room.currentBet = 0;
-    // Resetear acted para todos los jugadores activos
+    // FIX: resetear acted Y currentBet de cada asiento entre calles
+    // Sin esto callAmount se calcula negativo en flop/turn/river
     room.seats.forEach(seat => {
-        if (seat && seat.active) seat.acted = false;
+        if (seat && seat.active) {
+            seat.acted = false;
+            seat.currentBet = 0;
+        }
     });
 
     // El primer turno después de flop/turn/river es el siguiente al dealer (o el primero a la izquierda del dealer)
@@ -403,6 +439,18 @@ function startNewHand(io: Server, roomId: string) {
     room.turnIndex = turnIdx;
     room.actionInProgress = false;
 
+    // Notificar al primer jugador en actuar
+    const firstTurnSeat = room.seats[turnIdx];
+    if (firstTurnSeat) {
+        const callAmount = Math.max(0, room.currentBet - firstTurnSeat.currentBet);
+        io.to(firstTurnSeat.id).emit('yourTurn', {
+            callAmount,
+            minRaise: room.currentBet + room.minRaise,
+            maxRaise: firstTurnSeat.balance + firstTurnSeat.currentBet,
+            currentBet: room.currentBet
+        });
+    }
+
     // Iniciar timer
     if (room.turnTimer) clearTimeout(room.turnTimer);
     room.turnTimer = setTimeout(() => {
@@ -474,12 +522,22 @@ function handlePlayerAction(io: Server, roomId: string, playerId: string, action
             player.balance -= raiseTotal;
             player.currentBet = betAmount;
             room.pot += raiseTotal;
+            const prevBet = room.currentBet;
             room.currentBet = betAmount;
             room.lastRaise = betAmount;
-            room.minRaise = betAmount - room.currentBet; // Simplificado
+            // FIX: guardar prevBet antes de actualizarlo, si no minRaise siempre es 0
+            room.minRaise = betAmount - prevBet;
             if (player.balance === 0) player.isAllIn = true;
             player.lastAction = 'RAISE';
             actionText = 'subió a ' + betAmount;
+            // Al subir, los demás deben volver a actuar
+            room.seats.forEach(s => {
+                if (s && s.active && !s.isAllIn && s.id !== player.id) s.acted = false;
+            });
+            // BUG FIX 4: Al subir la apuesta, los demás jugadores deben volver a actuar
+            room.seats.forEach(s => {
+                if (s && s.active && !s.isAllIn && s.id !== player.id) s.acted = false;
+            });
             break;
         case 'allin':
             const allInAmount = player.balance;
@@ -508,6 +566,7 @@ function handlePlayerAction(io: Server, roomId: string, playerId: string, action
     }
 
     player.actionId = (player.actionId || 0) + 1;
+    player.acted = true; // BUG FIX: marcar que actuó en esta ronda
     io.to(roomId).emit('serverLog', { message: `🎲 ${player.name} ${actionText}.`, type: 'log-action' });
 
     // Verificar si la mano terminó (todos los demás se retiraron o all-in)

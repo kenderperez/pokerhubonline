@@ -1,0 +1,72 @@
+/* ═══════════════════════════════════════════════
+   CARTAS DE POKER
+═══════════════════════════════════════════════ */
+
+.card {
+  width: 38px;
+  height: 54px;
+  border-radius: 5px;
+  background: #fff;
+  border: 1px solid #ccc;
+  position: relative;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  flex-shrink: 0;
+  box-shadow: 1px 2px 6px rgba(0,0,0,0.6);
+}
+
+.card.hidden {
+  background: linear-gradient(135deg, #1a3a6a 25%, #0d2b4e 25%,
+    #0d2b4e 50%, #1a3a6a 50%, #1a3a6a 75%, #0d2b4e 75%);
+  background-size: 8px 8px;
+  border: 1px solid #2a5a9a;
+}
+
+.card-red  { color: #e74c3c; }
+.card-black { color: #1a1a2e; }
+
+.card-corner {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+
+.card-corner.top-left  { top: 3px;  left:  4px; }
+.card-corner.bottom-right {
+  bottom: 3px; right: 4px;
+  transform: rotate(180deg);
+}
+
+.card-corner .rank { font-size: 12px; font-weight: 900; }
+.card-corner .suit { font-size: 9px;  line-height: 1;    }
+
+.card-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* Cartas comunitarias — más grandes */
+.community-card-anim {
+  width: 50px;
+  height: 70px;
+  animation: cardReveal 0.3s ease-out;
+}
+
+.community-card-anim .card-corner .rank { font-size: 14px; }
+.community-card-anim .card-center       { font-size: 26px; }
+
+@keyframes cardReveal {
+  from { transform: rotateY(90deg) scale(0.8); opacity: 0; }
+  to   { transform: rotateY(0deg)  scale(1);   opacity: 1; }
+}
+
+/* Winner highlight */
+.winner-highlight {
+  box-shadow: 0 0 0 2px #d4af37, 0 0 12px #d4af3780;
+}

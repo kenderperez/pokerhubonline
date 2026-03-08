@@ -11,47 +11,42 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
 
-const frontendPath = path.join(__dirname, "../../frontend");
-console.log("📁 Ruta calculada para frontend:", frontendPath);
+// ✅ CORS habilitado para Vite (dev) y producción
+const io = new Server(server, {
+  cors: {
+    origin: [
+      "http://localhost:5173",  // Vite dev server
+      "http://localhost:4173",  // Vite preview
+      "http://localhost:3000",  // Mismo origen en producción
+    ],
+    methods: ["GET", "POST"],
+    credentials: true,
+  }
+});
+
+// ── Servir frontend en PRODUCCIÓN ─────────────────────────────────────────────
+// En desarrollo Vite corre en su propio puerto, esto solo aplica para el build
+const frontendPath = path.join(__dirname, "../../frontend-react-casino/dist");
 
 if (fs.existsSync(frontendPath)) {
-  console.log("✅ La carpeta frontend existe.");
+  console.log("✅ Frontend build encontrado:", frontendPath);
+  app.use(express.static(frontendPath));
+  app.use((req, res) => {
+    res.sendFile(path.join(frontendPath, "index.html"));
+  });
 } else {
-  console.error("❌ La carpeta frontend NO existe en esa ruta.");
+  console.log("ℹ️  Sin build de frontend — modo desarrollo (usa Vite en puerto 5173)");
 }
 
-const indexPath = path.join(frontendPath, "index.html");
-if (fs.existsSync(indexPath)) {
-  console.log("✅ index.html encontrado en:", indexPath);
-} else {
-  console.error("❌ No se encontró index.html en:", indexPath);
-}
-
-// ✅ CSP corregida para permitir recursos externos
-app.use((req, res, next) => {
-  res.removeHeader('Content-Security-Policy');
-  res.setHeader(
-  'Content-Security-Policy',
-  "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; " +
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.socket.io; " +
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-  "font-src 'self' data: https://fonts.gstatic.com; " +
-  "connect-src 'self' ws: wss: http://localhost:3000 https://cdn.socket.io;"
-);
-  next();
-});
-
-app.use(express.static(frontendPath));
-
-// Middleware para SPA (rutas no encontradas)
-app.use((req, res) => {
-  res.sendFile(indexPath);
-});
-
+// ── Socket.IO ─────────────────────────────────────────────────────────────────
 io.on("connection", (socket) => {
+  console.log(`✅ Socket conectado: ${socket.id}`);
   registerGameHandlers(io, socket);
+
+  socket.on("disconnect", () => {
+    console.log(`❌ Socket desconectado: ${socket.id}`);
+  });
 });
 
 server.listen(3000, () => {

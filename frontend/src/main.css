@@ -1,0 +1,26 @@
+@import "tailwindcss";
+@import "./styles/table.css";
+@import "./styles/cards.css";
+@import "./styles/chips.css";
+
+:root {
+  --gold:         #d4af37;
+  --accent-red:   #ef4444;
+  --accent-green: #22d3a0;
+  --bg-dark:      #080c14;
+  --bg-panel:     #0d1626;
+  --bg-card:      #111d2e;
+  --border:       #1a2940;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'Rajdhani', sans-serif;
+  background: var(--bg-dark);
+  margin: 0;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar       { width: 4px; background: #0d1626; }
+::-webkit-scrollbar-thumb { background: #22d3a044; border-radius: 2px; }
