@@ -12,8 +12,10 @@ export default function TopBar() {
   }
 
   return (
-    <div className="flex items-center justify-between px-5 py-3
+    <div className="flex items-center justify-between px-5 py-2
                     bg-[#0a1020] border-b border-[#1a2940] z-40">
+
+      {/* Salir */}
       <button
         onClick={handleExit}
         className="text-[#3a5878] text-xs hover:text-white transition-colors tracking-widest"
@@ -21,22 +23,34 @@ export default function TopBar() {
         ← SALIR
       </button>
 
-      <div className="text-[#ef4444] font-bold tracking-widest text-sm"
-           style={{ fontFamily: 'Rajdhani' }}>
-        ♠ POKERHUB
-      </div>
+      <img
+        src="/assets/adsdsa.png"
+        alt="PokerHub"
+        className="h-10 object-contain"
+      />
 
+      {/* Balance con pokerhubchip.png */}
       <div className="flex items-center gap-3">
         {roomId && (
-          <span className="text-[#3a5878] text-xs tracking-wider">SALA: <span className="text-white">{roomId}</span></span>
+          <span className="text-[#3a5878] text-xs tracking-wider">
+            SALA: <span className="text-white">{roomId}</span>
+          </span>
         )}
         <div className="flex items-center gap-2 bg-[#111d2e] border border-[#1a2940] rounded-full px-3 py-1">
-          <div className="w-3 h-3 rounded-full"
-               style={{ background: 'conic-gradient(#d4af37, #b8860b, #d4af37)' }} />
+          <img
+            src="/assets/pokerhubchip.svg"
+            alt="chip"
+            className="w-5 h-5 object-contain"
+            onError={e => {
+              // fallback a png si el svg no existe
+              e.target.src = '/assets/pokerhubchip.png'
+            }}
+          />
           <span className="text-white font-bold text-sm">${myBalance.toLocaleString()}</span>
           <span className="text-[#3a5878] text-[10px]">{toBB(myBalance)}</span>
         </div>
       </div>
+
     </div>
   )
 }

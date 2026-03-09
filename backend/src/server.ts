@@ -7,45 +7,64 @@ import { fileURLToPath } from "url";
 import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname  = path.dirname(__filename);
 
-const app = express();
+const app    = express();
 const server = http.createServer(app);
 
-// ✅ CORS habilitado para Vite (dev) y producción
+// ✅ CORS — permite conexiones desde Vite dev server y build preview
 const io = new Server(server, {
   cors: {
     origin: [
-      "http://localhost:5173",  // Vite dev server
-      "http://localhost:4173",  // Vite preview
-      "http://localhost:3000",  // Mismo origen en producción
+      "http://localhost:5173",  // vite dev
+      "http://localhost:4173",  // vite preview
+      "http://localhost:3000",  // mismo origen (producción)
     ],
     methods: ["GET", "POST"],
     credentials: true,
   }
 });
 
-// ── Servir frontend en PRODUCCIÓN ─────────────────────────────────────────────
-// En desarrollo Vite corre en su propio puerto, esto solo aplica para el build
-const frontendPath = path.join(__dirname, "../../frontend-react-casino/dist");
+const frontendPath = path.join(__dirname, "../../frontend");
+
+console.log("📁 Ruta calculada para frontend:", frontendPath);
 
 if (fs.existsSync(frontendPath)) {
-  console.log("✅ Frontend build encontrado:", frontendPath);
-  app.use(express.static(frontendPath));
-  app.use((req, res) => {
-    res.sendFile(path.join(frontendPath, "index.html"));
-  });
+  console.log("✅ La carpeta frontend existe.");
 } else {
-  console.log("ℹ️  Sin build de frontend — modo desarrollo (usa Vite en puerto 5173)");
+  console.warn("⚠️  La carpeta frontend no existe en esa ruta (normal en dev).");
 }
 
-// ── Socket.IO ─────────────────────────────────────────────────────────────────
+// CSP
+app.use((req, res, next) => {
+  res.removeHeader("Content-Security-Policy");
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; " +
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.socket.io; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "font-src 'self' data: https://fonts.gstatic.com; " +
+    "connect-src 'self' ws: wss: http://localhost:3000 http://localhost:5173 https://cdn.socket.io;"
+  );
+  next();
+});
+
+// Servir frontend estático (solo en producción)
+if (fs.existsSync(frontendPath)) {
+  app.use(express.static(frontendPath));
+  app.use((req, res) => {
+    const indexPath = path.join(frontendPath, "index.html");
+    res.sendFile(indexPath);
+  });
+}
+
+// Registrar handlers de Socket.IO
 io.on("connection", (socket) => {
-  console.log(`✅ Socket conectado: ${socket.id}`);
+  console.log(`🔌 Cliente conectado: ${socket.id}`);
   registerGameHandlers(io, socket);
 
   socket.on("disconnect", () => {
-    console.log(`❌ Socket desconectado: ${socket.id}`);
+    console.log(`🔌 Cliente desconectado: ${socket.id}`);
   });
 });
 

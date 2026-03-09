@@ -15,8 +15,6 @@ export default function Lobby() {
              style={{ background: 'radial-gradient(circle, #22d3a012 0%, transparent 65%)' }} />
         <div className="absolute bottom-[-20%] right-[-10%] w-125 h-125 rounded-full"
              style={{ background: 'radial-gradient(circle, #ef444412 0%, transparent 65%)' }} />
-        <div className="absolute top-[40%] left-[50%] w-75 h-75 rounded-full"
-             style={{ background: 'radial-gradient(circle, #d4af3708 0%, transparent 70%)', transform: 'translate(-50%,-50%)' }} />
       </div>
 
       {/* Loading overlay */}
@@ -27,22 +25,22 @@ export default function Lobby() {
         </div>
       )}
 
-      <div className="w-115s relative z-10 px-4">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-3 mb-2">
-            <span className="text-[#ef4444] text-4xl">♠</span>
-            <span className="text-white font-black tracking-[0.25em] text-4xl"
-                  style={{ fontFamily: 'Rajdhani' }}>POKERHUB</span>
-            <span className="text-[#ef4444] text-4xl">♠</span>
-          </div>
-          <div className="text-[#d4af37] text-[10px] tracking-[0.5em] uppercase">Texas Hold'em — Web3</div>
+      <div className="w-115 relative z-10 px-4">
+
+        {/* Logo imagen */}
+        <div className="flex justify-center mb-8">
+          <img
+            src="/assets/pokerhubSSSSS.png"
+            alt="PokerHub"
+            className="h-24 object-contain drop-shadow-2xl"
+          />
         </div>
 
         {/* Panel */}
         <div className="bg-[#0d1626] border border-[#1a2940] rounded-2xl shadow-2xl overflow-hidden">
           {!playerName ? <AuthScreen /> : <LobbyScreen />}
         </div>
+
       </div>
     </div>
   )

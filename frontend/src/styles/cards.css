@@ -1,72 +1,192 @@
-/* ═══════════════════════════════════════════════
-   CARTAS DE POKER
-═══════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════
+   CARTAS 3D — arquitectura correcta: outer=posición, inner=flip
+══════════════════════════════════════════════════════════ */
 
-.card {
-  width: 38px;
-  height: 54px;
-  border-radius: 5px;
-  background: #fff;
-  border: 1px solid #ccc;
+:root {
+  --card-w: 56px;
+  --card-h: 86px;          /* ratio ~1.55 */
+  --color-card-face: #f5f3ee;
+  --color-card-back: #0f1923;
+  --color-suits-red:   #c20114;
+  --color-suits-black: #0c120c;
+}
+
+/* ── Inner: solo maneja el flip 3D ─────────────────────── */
+.card-inner {
+  width: var(--card-w);
+  height: var(--card-h);
+  transform-style: preserve-3d;
   position: relative;
-  font-family: 'Rajdhani', sans-serif;
-  font-weight: 700;
-  flex-shrink: 0;
-  box-shadow: 1px 2px 6px rgba(0,0,0,0.6);
+  transform: rotateY(0deg);      /* dorso visible */
+  transition: transform 0ms;     /* sin transición hasta que se revele */
+  will-change: transform;
 }
 
-.card.hidden {
-  background: linear-gradient(135deg, #1a3a6a 25%, #0d2b4e 25%,
-    #0d2b4e 50%, #1a3a6a 50%, #1a3a6a 75%, #0d2b4e 75%);
-  background-size: 8px 8px;
-  border: 1px solid #2a5a9a;
+.card-inner--flip {
+  transform: rotateY(180deg);    /* cara visible */
+  transition: transform 600ms ease-out;
 }
 
-.card-red  { color: #e74c3c; }
-.card-black { color: #1a1a2e; }
-
-.card-corner {
+/* ── Cara y dorso comparten posición ────────────────────── */
+.card__back,
+.card__face {
   position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* ── DORSO ───────────────────────────────────────────────── */
+.card__back {
+  background-color: var(--color-card-back);
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.05) 10%,
+      transparent 10%, transparent 20%
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.05) 10%,
+      transparent 10%, transparent 20%
+    );
+  box-shadow:
+    inset 0 0 0 3px rgba(10,20,35,0.95),
+    inset 0 0 0 5px rgba(212,175,55,0.3),
+    0 4px 14px rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.card__back::after {
+  content: "♠";
+  font-size: 20px;
+  color: rgba(212,175,55,0.22);
+}
+
+/* ── CARA ────────────────────────────────────────────────── */
+.card__face {
+  transform: rotateY(180deg);     /* oculta por defecto */
+  background: var(--color-card-face);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: 4px 4px 4px 4px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0,0,0,0.12),
+    2px 5px 14px rgba(0,0,0,0.65);
+}
+
+/* Colores según palo */
+.card-inner--red  .card__face { color: var(--color-suits-red); }
+.card-inner--black .card__face { color: var(--color-suits-black); }
+
+/* Esquinas top-left / bottom-right */
+.card__corner {
   display: flex;
   flex-direction: column;
   align-items: center;
   line-height: 1;
+  font-family: Georgia, serif;
+  gap: 1px;
 }
+.card__corner.tl { align-self: start; justify-self: start; }
+.card__corner.br { align-self: end;   justify-self: end; transform: rotate(180deg); }
+.card__corner .rank { font-size: 14px; font-weight: 900; letter-spacing: -1px; }
+.card__corner .suit { font-size: 9px; line-height: 1; }
 
-.card-corner.top-left  { top: 3px;  left:  4px; }
-.card-corner.bottom-right {
-  bottom: 3px; right: 4px;
-  transform: rotate(180deg);
-}
-
-.card-corner .rank { font-size: 12px; font-weight: 900; }
-.card-corner .suit { font-size: 9px;  line-height: 1;    }
-
-.card-center {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 20px;
+/* Palo central grande */
+.card__center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
   line-height: 1;
 }
 
-/* Cartas comunitarias — más grandes */
-.community-card-anim {
-  width: 50px;
-  height: 70px;
-  animation: cardReveal 0.3s ease-out;
+/* ── Ganadora ─────────────────────────────────────────────── */
+.card-inner--winner .card__face {
+  box-shadow:
+    0 0 20px #2ed573,
+    inset 0 0 0 2px #2ed573,
+    2px 5px 14px rgba(0,0,0,0.65);
 }
 
-.community-card-anim .card-corner .rank { font-size: 14px; }
-.community-card-anim .card-center       { font-size: 26px; }
+/* ══════════════════════════════════════════════════════════
+   MANO DEL JUGADOR — abanico con animación de reparto
+══════════════════════════════════════════════════════════ */
 
-@keyframes cardReveal {
-  from { transform: rotateY(90deg) scale(0.8); opacity: 0; }
-  to   { transform: rotateY(0deg)  scale(1);   opacity: 1; }
+/* Contenedor del abanico */
+.player-hand {
+  position: absolute;
+  top: -52px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 160px;
+  height: calc(var(--card-h) + 30px);
+  perspective: 600px;
+  perspective-origin: 50% 130%;
+  pointer-events: none;
+  z-index: 12;
 }
 
-/* Winner highlight */
-.winner-highlight {
-  box-shadow: 0 0 0 2px #d4af37, 0 0 12px #d4af3780;
+/* Slot exterior: maneja posición y rotación en abanico */
+.hand-slot {
+  position: absolute;
+  transition: left 620ms ease-out, top 620ms ease-out, transform 620ms ease-out, opacity 300ms ease-out;
+  will-change: left, top, transform;
+}
+
+/* Slot en estado de ENTRADA (sin transición, arriba centrado) */
+.hand-slot--entering {
+  left: 50% !important;
+  top: -130px !important;
+  transform: translateX(-50%) !important;
+  opacity: 0;
+  transition: none !important;
+}
+
+/* Posiciones finales abanico para 2 cartas */
+.player-hand .hand-slot:nth-child(1):nth-last-child(2) {
+  left: 28%;
+  top: 8%;
+  transform: translateX(-50%) translateZ(60px) rotateZ(-9deg);
+}
+.player-hand .hand-slot:nth-child(2):nth-last-child(1) {
+  left: 72%;
+  top: 8%;
+  transform: translateX(-50%) translateZ(60px) rotateZ(9deg);
+}
+/* 1 carta sola */
+.player-hand .hand-slot:nth-child(1):nth-last-child(1) {
+  left: 50%;
+  top: 5%;
+  transform: translateX(-50%) translateZ(60px);
+}
+
+/* ══════════════════════════════════════════════════════════
+   CARTAS COMUNITARIAS
+══════════════════════════════════════════════════════════ */
+
+.community-cards-wrapper {
+  position: absolute !important;
+  top: 42%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 200 !important;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Slot comunitario: entra desde arriba con slide */
+.community-slot {
+  transform-origin: center bottom;
+  animation: communitySlideIn 500ms cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+@keyframes communitySlideIn {
+  0%   { opacity: 0; transform: translateY(-40px) scale(0.7); }
+  100% { opacity: 1; transform: translateY(0)     scale(1); }
 }

@@ -1,74 +1,74 @@
 import { Server, Socket } from 'socket.io';
 import { PokerEngine } from '../engine/pokerEngine.js';
 
-// Interfaz para la información básica del cliente (espectadores)
 interface ClientInfo {
     id: string;
     address: string;
     name: string;
 }
 
-// Interfaz para un jugador sentado en la mesa
 interface Seat {
     id: string;
     address: string;
     name: string;
     balance: number;
-    holeCards: any[]; // Podemos tipar mejor con Card[] si importamos
+    holeCards: any[];
     currentBet: number;
-    active: boolean;      // Si está en la mano (no se ha retirado)
-    acted: boolean;       // Si ya actuó en la ronda actual
+    active: boolean;
+    acted: boolean;
     isAllIn: boolean;
     lastAction: string;
-    actionId: number;     // Para animaciones de acción
-    sittingOut: boolean;  // Si está ausente (para futura funcionalidad)
+    actionId: number;
+    sittingOut: boolean;
+    raiseCount: number;   // ← subidas en la calle actual
 }
 
 interface Room {
     id: string;
     host: string;
     seats: Array<Seat | null>;
-    clients: Record<string, ClientInfo>; // Todos los sockets conectados (espectadores + jugadores)
+    clients: Record<string, ClientInfo>;
     engine: PokerEngine;
     gameState: 'WAITING' | 'PLAYING' | 'HAND_OVER';
     handState: 'WAITING' | 'PREFLOP' | 'FLOP' | 'TURN' | 'RIVER' | 'SHOWDOWN';
     pot: number;
     currentBet: number;
-    turnIndex: number;      // Índice del jugador que debe actuar ahora
+    turnIndex: number;
     dealerIndex: number;
     sbIndex: number;
     bbIndex: number;
-    type: string;           // 'free' o 'paid'
+    type: string;
     isPublic: boolean;
     turnTimer: NodeJS.Timeout | null;
-    leaderboard: Record<string, any>; // Podría ser para estadísticas
+    leaderboard: Record<string, any>;
     smallBlind: number;
     bigBlind: number;
     minRaise: number;
-    lastRaise: number;
-    actionInProgress: boolean; // Para evitar acciones simultáneas
+    lastRaiseSize: number;  // ← tamaño del último raise para calcular mínimos
+    actionInProgress: boolean;
 }
 
 const rooms: Record<string, Room> = {};
 
-// Constantes
 const DEFAULT_BALANCE = 1000;
-const SMALL_BLIND = 5;
-const BIG_BLIND = 10;
-const TURN_TIMEOUT = 30000; // 30 segundos
+const SMALL_BLIND     = 5;
+const BIG_BLIND       = 10;
+const TURN_TIMEOUT    = 30000;
+const MAX_RAISES_PER_STREET = 3;  // tras 3 raises, solo all-in
 
-// Función para obtener el ID de la sala a la que pertenece el socket (excluyendo su propio ID)
+// ─────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────
+
 function getRoomId(socket: Socket): string | null {
     const roomsArray = Array.from(socket.rooms.values());
     return roomsArray.find(r => r !== socket.id) || null;
 }
 
-// Transmite el estado actual del juego a todos los clientes en la sala
 function broadcastState(io: Server, roomId: string): void {
     const room = rooms[roomId];
     if (!room) return;
 
-    // Preparamos el objeto de estado que se enviará al cliente
     const gameState = {
         seats: room.seats.map(seat => {
             if (!seat) return null;
@@ -78,39 +78,34 @@ function broadcastState(io: Server, roomId: string): void {
                 balance: seat.balance,
                 currentBet: seat.currentBet,
                 active: seat.active,
-                // Convertimos las cartas a string para evitar errores en el cliente
                 holeCards: seat.holeCards ? seat.holeCards.map(c => {
-                    // Si ya es string, lo usamos; si es objeto, intentamos convertirlo
                     if (typeof c === 'string') return c;
                     if (c.rank && c.suit) return c.rank + c.suit;
-                    return c.toString(); // fallback
+                    return c.toString();
                 }) : [],
                 lastAction: seat.lastAction,
                 actionId: seat.actionId,
-                // FIX: bestHand e isAllIn necesarios en el cliente
                 bestHand: (seat as any).bestHand || null,
                 isAllIn: seat.isAllIn,
             };
         }),
-        gameState: room.gameState,
-        handState: room.handState,
-        pot: room.pot,
-        currentBet: room.currentBet,
-        currentTurnIndex: room.turnIndex,
-        dealerIndex: room.dealerIndex,
-        sbIndex: room.sbIndex,
-        bbIndex: room.bbIndex,
-        winningCards: [],
-        smallBlind: room.smallBlind,
-        bigBlind: room.bigBlind,
+        gameState:         room.gameState,
+        handState:         room.handState,
+        pot:               room.pot,
+        currentBet:        room.currentBet,
+        currentTurnIndex:  room.turnIndex,
+        dealerIndex:       room.dealerIndex,
+        sbIndex:           room.sbIndex,
+        bbIndex:           room.bbIndex,
+        winningCards:      [],
+        smallBlind:        room.smallBlind,
+        bigBlind:          room.bigBlind,
         board: room.engine.board.map(c => (typeof c === 'string' ? c : c.rank + c.suit)),
-        // BUG FIX 2: Incluir las cartas comunitarias - sin esto el 
     };
+
     io.to(roomId).emit('gameState', gameState);
-    console.log('Enviando gameState para sala', roomId, 'asientos:', room.seats);
 }
 
-// Actualiza la lista de salas públicas para el lobby global
 function updateGlobalLobby(io: Server): void {
     const publicRooms = Object.values(rooms)
         .filter(r => r.isPublic)
@@ -118,159 +113,140 @@ function updateGlobalLobby(io: Server): void {
     io.emit('publicRooms', publicRooms);
 }
 
-// Lógica para que un cliente se una a una sala (como espectador o para sentarse después)
 function joinClientToRoom(io: Server, socket: Socket, roomId: string, address?: string, name?: string) {
     const room = rooms[roomId];
-    if (!room) {
-        socket.emit('error', 'Sala no encontrada');
-        return false;
-    }
+    if (!room) { socket.emit('error', 'Sala no encontrada'); return false; }
 
-    // Guardamos la información del cliente en la sala
-    room.clients[socket.id] = { 
-        id: socket.id, 
-        address: address || '', 
-        name: name || 'Jugador' 
-    };
-
-    // Unimos el socket a la sala de Socket.IO
+    room.clients[socket.id] = { id: socket.id, address: address || '', name: name || 'Jugador' };
     socket.join(roomId);
-
-    // Enviamos confirmación al cliente
-    socket.emit('roomJoined', {
-        roomId,
-        isHost: room.host === socket.id,
-        type: room.type
-    });
-
-    // Log de entrada
-    io.to(roomId).emit('serverLog', { 
-        message: `👁️ ${name || 'Jugador'} entró como espectador.`, 
-        type: 'log-info' 
-    });
-
-    // Enviamos el estado actual
+    socket.emit('roomJoined', { roomId, isHost: room.host === socket.id, type: room.type });
+    io.to(roomId).emit('serverLog', { message: `👁️ ${name || 'Jugador'} entró como espectador.`, type: 'log-info' });
     broadcastState(io, roomId);
     return true;
 }
 
-// Función para avanzar al siguiente turno (turno de poker)
-function nextTurn(io: Server, roomId: string) {
+// Emite yourTurn al jugador que debe actuar
+function emitYourTurn(io: Server, room: Room, seatIdx: number): void {
+    const seat = room.seats[seatIdx];
+    if (!seat) return;
+
+    const callAmount = Math.max(0, room.currentBet - seat.currentBet);
+
+    // Mínimo raise = 25% del pot, pero al menos un bigBlind
+    const minRaiseIncrement = Math.max(room.bigBlind, Math.floor(room.pot * 0.25));
+    const minRaiseTotal     = room.currentBet + minRaiseIncrement;
+    const maxRaise          = seat.balance + seat.currentBet;
+
+    // ¿Ya agotó sus raises? solo puede all-in
+    const raiseCapped = seat.raiseCount >= MAX_RAISES_PER_STREET;
+
+    io.to(seat.id).emit('yourTurn', {
+        callAmount,
+        minRaise:   minRaiseTotal,
+        maxRaise,
+        currentBet: room.currentBet,
+        raiseCapped,            // el cliente puede desactivar el botón de raise
+        pot:        room.pot,
+    });
+    io.to(seat.id).emit('timerStart', { seatIndex: seatIdx, duration: TURN_TIMEOUT });
+}
+
+// ─────────────────────────────────────────────────────────────
+// NEXT TURN
+// ─────────────────────────────────────────────────────────────
+
+function nextTurn(io: Server, roomId: string): void {
     const room = rooms[roomId];
     if (!room || room.gameState !== 'PLAYING') return;
 
-    // Buscar el siguiente jugador activo (no all-in, no folded)
-    let nextIdx = (room.turnIndex + 1) % room.seats.length;
-    let found = false;
-    let count = 0;
-    while (count < room.seats.length) {
-        const seat = room.seats[nextIdx];
-        if (seat && seat.active && !seat.isAllIn) {
-            found = true;
-            break;
-        }
-        nextIdx = (nextIdx + 1) % room.seats.length;
-        count++;
-    }
+    // ¿Cuántos jugadores activos pueden actuar (no all-in)?
+    const canAct = room.seats.filter(s => s && s.active && !s.isAllIn);
 
-    if (!found) {
-        // Si no hay más jugadores activos, pasar a la siguiente ronda o showdown
+    // Si 0 o 1 puede actuar, correr el tablero automáticamente
+    if (canAct.length <= 1) {
         advanceHandStage(io, roomId);
         return;
     }
 
-    room.turnIndex = nextIdx;
+    // Buscar el siguiente jugador activo que puede actuar
+    let nextIdx = (room.turnIndex + 1) % room.seats.length;
+    let found   = false;
+    for (let count = 0; count < room.seats.length; count++) {
+        const seat = room.seats[nextIdx];
+        if (seat && seat.active && !seat.isAllIn) { found = true; break; }
+        nextIdx = (nextIdx + 1) % room.seats.length;
+    }
+
+    if (!found) { advanceHandStage(io, roomId); return; }
+
+    room.turnIndex       = nextIdx;
     room.actionInProgress = false;
 
-    // Notificar al jugador cuyo turno es con la info necesaria para el panel
-    const turnSeat = room.seats[nextIdx];
-    if (turnSeat) {
-        const callAmount = Math.max(0, room.currentBet - turnSeat.currentBet);
-        io.to(turnSeat.id).emit('yourTurn', {
-            callAmount,
-            minRaise: room.currentBet + room.minRaise,
-            maxRaise: turnSeat.balance + turnSeat.currentBet,
-            currentBet: room.currentBet
-        });
-    }
+    emitYourTurn(io, room, nextIdx);
 
-    // FIX: emitir timerStart para que la barra visual arranque en el cliente
-    if (turnSeat) {
-        io.to(turnSeat.id).emit('timerStart', { seatIndex: nextIdx, duration: TURN_TIMEOUT });
-    }
-
-    // Reiniciamos el timer
     if (room.turnTimer) clearTimeout(room.turnTimer);
     room.turnTimer = setTimeout(() => {
-        const currentPlayerId = room.seats[room.turnIndex]?.id;
-        if (currentPlayerId) {
-            handlePlayerAction(io, roomId, currentPlayerId, 'fold', 0);
-        }
+        const pid = room.seats[room.turnIndex]?.id;
+        if (pid) handlePlayerAction(io, roomId, pid, 'fold', 0);
     }, TURN_TIMEOUT);
 
     broadcastState(io, roomId);
 }
 
-// Avanza la etapa de la mano (preflop -> flop -> turn -> river -> showdown)
-function advanceHandStage(io: Server, roomId: string) {
+// ─────────────────────────────────────────────────────────────
+// ADVANCE HAND STAGE  (PREFLOP → FLOP → TURN → RIVER → SHOWDOWN)
+// ─────────────────────────────────────────────────────────────
+
+function advanceHandStage(io: Server, roomId: string): void {
     const room = rooms[roomId];
     if (!room || room.gameState !== 'PLAYING') return;
 
-    // Verificar si queda más de un jugador activo
     const activePlayers = room.seats.filter(s => s && s.active);
+
+    // Solo queda un jugador activo → gana inmediatamente
     if (activePlayers.length === 1) {
-        // Solo un jugador, gana la mano
         endHand(io, roomId, activePlayers[0]!.id);
         return;
     }
 
-    // Determinar siguiente etapa
-    let nextStage: typeof room.handState = 'SHOWDOWN';
-    switch (room.handState) {
-        case 'PREFLOP':
-            // Repartir flop
-            room.engine.dealFlop();
-            nextStage = 'FLOP';
-            break;
-        case 'FLOP':
-            room.engine.dealTurn();
-            nextStage = 'TURN';
-            break;
-        case 'TURN':
-            room.engine.dealRiver();
-            nextStage = 'RIVER';
-            break;
-        case 'RIVER':
-            // Showdown
-            nextStage = 'SHOWDOWN';
-            break;
-        default:
-            break;
-    }
+    // ¿Todos los activos están all-in? Correr tablero completo de golpe
+    const allAllIn = activePlayers.every(s => s!.isAllIn);
 
-    if (nextStage === 'SHOWDOWN') {
-        // Evaluar ganadores
-        // Obtener los jugadores ganadores del motor (devuelve objetos Player)
-        // FIX: evaluatePlayer NUNCA se llamaba. score siempre era -1 → todos empataban.
-        const seatedActiveIndices = room.seats.map((s, idx) => s !== null ? idx : -1).filter(idx => idx !== -1);
+    // Revelar cartas al entrar en SHOWDOWN o all-in
+    const goingToShowdown = room.handState === 'RIVER' || allAllIn;
+
+    if (goingToShowdown) {
+        // Si hay cartas pendientes por repartir (all-in prematuro), repartirlas
+        if (room.handState === 'PREFLOP') { room.engine.dealFlop(); room.engine.dealTurn(); room.engine.dealRiver(); }
+        else if (room.handState === 'FLOP') { room.engine.dealTurn(); room.engine.dealRiver(); }
+        else if (room.handState === 'TURN') { room.engine.dealRiver(); }
+        // RIVER ya está repartida
+
+        room.handState = 'SHOWDOWN';
+        broadcastState(io, roomId); // mostrar todas las cartas comunitarias
+
+        // Evaluar y resolver
+        const seatedActiveIndices = room.seats
+            .map((s, idx) => s !== null ? idx : -1)
+            .filter(idx => idx !== -1);
+
         seatedActiveIndices.forEach((seatIdx, engineIdx) => {
-            const seat = room.seats[seatIdx];
+            const seat         = room.seats[seatIdx];
             const enginePlayer = room.engine.players[engineIdx];
             if (seat && seat.active && enginePlayer) {
                 room.engine.evaluatePlayer(enginePlayer);
-                // Pasar bestHand al seat para que broadcastState lo incluya
                 (seat as any).bestHand = enginePlayer.bestHand;
             }
         });
+
         const winningPlayers = room.engine.determineWinners();
-        // Convertirlos a IDs de asiento usando el orden de engine.players y asientos sentados
-        const seatedIndices = room.seats.map((s, idx) => (s !== null ? idx : -1)).filter(idx => idx !== -1);
+        const seatedIndices  = room.seats.map((s, idx) => (s !== null ? idx : -1)).filter(idx => idx !== -1);
         const winnerIds: string[] = [];
         winningPlayers.forEach(p => {
             const playerIdx = room.engine.players.indexOf(p);
             if (playerIdx !== -1 && playerIdx < seatedIndices.length) {
                 const seatIdx = seatedIndices[playerIdx];
-                const seat = room.seats[seatIdx];
+                const seat    = room.seats[seatIdx];
                 if (seat) winnerIds.push(seat.id);
             }
         });
@@ -278,198 +254,194 @@ function advanceHandStage(io: Server, roomId: string) {
         return;
     }
 
-    room.handState = nextStage;
-    room.currentBet = 0;
-    // FIX: resetear acted Y currentBet de cada asiento entre calles
-    // Sin esto callAmount se calcula negativo en flop/turn/river
+    // Repartir siguiente carta comunitaria
+    switch (room.handState) {
+        case 'PREFLOP': room.engine.dealFlop();  room.handState = 'FLOP';  break;
+        case 'FLOP':    room.engine.dealTurn();  room.handState = 'TURN';  break;
+        case 'TURN':    room.engine.dealRiver(); room.handState = 'RIVER'; break;
+        default: break;
+    }
+
+    // Resetear bets y raiseCount para la nueva calle
+    room.currentBet   = 0;
+    room.minRaise     = room.bigBlind;
+    room.lastRaiseSize = room.bigBlind;
+
     room.seats.forEach(seat => {
         if (seat && seat.active) {
-            seat.acted = false;
+            seat.acted      = false;
             seat.currentBet = 0;
+            seat.raiseCount = 0;
         }
     });
 
-    // El primer turno después de flop/turn/river es el siguiente al dealer (o el primero a la izquierda del dealer)
-    // Por simplicidad, empezamos desde el primer jugador activo después del dealer
+    // Primer turno: primer activo a la izquierda del dealer
     let startIdx = (room.dealerIndex + 1) % room.seats.length;
-    while (room.seats[startIdx] === null || !room.seats[startIdx]!.active || room.seats[startIdx]!.isAllIn) {
+    for (let i = 0; i < room.seats.length; i++) {
+        const s = room.seats[startIdx];
+        if (s && s.active && !s.isAllIn) break;
         startIdx = (startIdx + 1) % room.seats.length;
     }
-    room.turnIndex = startIdx;
+
+    room.turnIndex        = startIdx;
     room.actionInProgress = false;
 
     broadcastState(io, roomId);
-    // Iniciar timer para el primer jugador
+
+    // ── FIX CLAVE: emitir yourTurn al primer jugador de la nueva calle ──
+    emitYourTurn(io, room, startIdx);
+
     if (room.turnTimer) clearTimeout(room.turnTimer);
     room.turnTimer = setTimeout(() => {
-        const currentPlayerId = room.seats[room.turnIndex]?.id;
-        if (currentPlayerId) {
-            handlePlayerAction(io, roomId, currentPlayerId, 'fold', 0);
-        }
+        const pid = room.seats[room.turnIndex]?.id;
+        if (pid) handlePlayerAction(io, roomId, pid, 'fold', 0);
     }, TURN_TIMEOUT);
 }
 
-// Finaliza la mano actual
-function endHand(io: Server, roomId: string, winnerIds: string | string[]) {
+// ─────────────────────────────────────────────────────────────
+// END HAND
+// ─────────────────────────────────────────────────────────────
+
+function endHand(io: Server, roomId: string, winnerIds: string | string[]): void {
     const room = rooms[roomId];
     if (!room) return;
 
-    // Aquí deberías repartir el bote a los ganadores
-    // Por simplicidad, asumimos un solo ganador
     if (typeof winnerIds === 'string') {
-        const winnerSeat = room.seats.find(s => s && s.id === winnerIds);
-        if (winnerSeat) {
-            winnerSeat.balance += room.pot;
-            io.to(roomId).emit('serverLog', { message: `🏆 ${winnerSeat.name} gana ${room.pot} fichas!`, type: 'log-success' });
+        const seat = room.seats.find(s => s && s.id === winnerIds);
+        if (seat) {
+            seat.balance += room.pot;
+            io.to(roomId).emit('serverLog', { message: `🏆 ${seat.name} gana $${room.pot}!`, type: 'log-success' });
         }
     } else {
-        // Múltiples ganadores, repartir equitativamente (simplificado)
         const share = Math.floor(room.pot / winnerIds.length);
         winnerIds.forEach(id => {
             const seat = room.seats.find(s => s && s.id === id);
-            if (seat) seat.balance += share;
+            if (seat) {
+                seat.balance += share;
+                io.to(roomId).emit('serverLog', { message: `🏆 ${seat.name} gana $${share}!`, type: 'log-success' });
+            }
         });
     }
 
-    // Limpiar para la siguiente mano
-    room.pot = 0;
-    room.currentBet = 0;
-    room.gameState = 'HAND_OVER';
-    room.handState = 'WAITING';
+    room.pot          = 0;
+    room.currentBet   = 0;
+    room.gameState    = 'HAND_OVER';
+    room.handState    = 'WAITING';
 
-    // Recoger cartas de los jugadores
     room.seats.forEach(seat => {
         if (seat) {
-            seat.holeCards = [];
+            seat.holeCards  = [];
             seat.currentBet = 0;
-            seat.active = true; // Se reseteará al empezar nueva mano
-            seat.acted = false;
-            seat.isAllIn = false;
+            seat.active     = true;
+            seat.acted      = false;
+            seat.isAllIn    = false;
+            seat.raiseCount = 0;
+            (seat as any).bestHand = null;
         }
     });
 
     broadcastState(io, roomId);
 
-    // Después de un breve tiempo, iniciar nueva mano automáticamente
     setTimeout(() => {
-        if (rooms[roomId] && rooms[roomId].gameState === 'HAND_OVER') {
-            startNewHand(io, roomId);
-        }
+        if (rooms[roomId]?.gameState === 'HAND_OVER') startNewHand(io, roomId);
     }, 5000);
 }
 
-// Inicia una nueva mano
-function startNewHand(io: Server, roomId: string) {
+// ─────────────────────────────────────────────────────────────
+// START NEW HAND
+// ─────────────────────────────────────────────────────────────
+
+function startNewHand(io: Server, roomId: string): void {
     const room = rooms[roomId];
     if (!room) return;
 
-    // Verificar que haya al menos 2 jugadores sentados
     const seatedPlayers = room.seats.filter(s => s !== null);
-    if (seatedPlayers.length < 2) {
-        room.gameState = 'WAITING';
-        broadcastState(io, roomId);
-        return;
-    }
+    if (seatedPlayers.length < 2) { room.gameState = 'WAITING'; broadcastState(io, roomId); return; }
 
-    // Mover el dealer (rotar)
+    // Rotar dealer
     room.dealerIndex = (room.dealerIndex + 1) % room.seats.length;
-    while (room.seats[room.dealerIndex] === null) {
+    while (room.seats[room.dealerIndex] === null)
         room.dealerIndex = (room.dealerIndex + 1) % room.seats.length;
-    }
 
-    // Asignar SB y BB (los siguientes jugadores activos)
+    // SB y BB
     let sbIdx = (room.dealerIndex + 1) % room.seats.length;
-    while (room.seats[sbIdx] === null) {
-        sbIdx = (sbIdx + 1) % room.seats.length;
-    }
+    while (room.seats[sbIdx] === null) sbIdx = (sbIdx + 1) % room.seats.length;
     room.sbIndex = sbIdx;
 
     let bbIdx = (sbIdx + 1) % room.seats.length;
-    while (room.seats[bbIdx] === null) {
-        bbIdx = (bbIdx + 1) % room.seats.length;
-    }
+    while (room.seats[bbIdx] === null) bbIdx = (bbIdx + 1) % room.seats.length;
     room.bbIndex = bbIdx;
 
-    // Reiniciar engine
+    // Nuevo motor
     room.engine = new PokerEngine();
-    // Iniciar juego con el número de jugadores sentados
-    room.engine.startGame(seatedPlayers.length); // Necesita adaptarse para asignar cartas a los jugadores
+    room.engine.startGame(seatedPlayers.length);
 
-    // Asignar cartas a cada jugador sentado (según el orden de la mesa)
-    // Nota: El engine debe tener una lista de jugadores en el mismo orden que los asientos ocupados.
-    // Por simplicidad, asumimos que engine.players está en el mismo orden que los asientos no nulos.
+    // Asignar cartas
     const seatedIndices = room.seats.map((s, idx) => s !== null ? idx : -1).filter(idx => idx !== -1);
     seatedIndices.forEach((seatIdx, engineIdx) => {
         const seat = room.seats[seatIdx]!;
-        seat.holeCards = room.engine.players[engineIdx]?.holeCards || [];
-        seat.active = true;
+        seat.holeCards  = room.engine.players[engineIdx]?.holeCards || [];
+        seat.active     = true;
         seat.currentBet = 0;
-        seat.acted = false;
-        seat.isAllIn = false;
+        seat.acted      = false;
+        seat.isAllIn    = false;
         seat.lastAction = '';
+        seat.raiseCount = 0;
+        (seat as any).bestHand = null;
     });
 
     // Cobrar ciegas
     const sbSeat = room.seats[room.sbIndex];
     const bbSeat = room.seats[room.bbIndex];
     if (sbSeat) {
-        const sbAmount = Math.min(room.smallBlind, sbSeat.balance);
-        sbSeat.balance -= sbAmount;
-        sbSeat.currentBet = sbAmount;
-        room.pot += sbAmount;
+        const sbAmt = Math.min(room.smallBlind, sbSeat.balance);
+        sbSeat.balance  -= sbAmt;
+        sbSeat.currentBet = sbAmt;
+        room.pot += sbAmt;
         if (sbSeat.balance === 0) sbSeat.isAllIn = true;
     }
     if (bbSeat) {
-        const bbAmount = Math.min(room.bigBlind, bbSeat.balance);
-        bbSeat.balance -= bbAmount;
-        bbSeat.currentBet = bbAmount;
-        room.pot += bbAmount;
+        const bbAmt = Math.min(room.bigBlind, bbSeat.balance);
+        bbSeat.balance  -= bbAmt;
+        bbSeat.currentBet = bbAmt;
+        room.pot += bbAmt;
         if (bbSeat.balance === 0) bbSeat.isAllIn = true;
     }
 
-    room.currentBet = room.bigBlind;
-    room.gameState = 'PLAYING';
-    room.handState = 'PREFLOP';
+    room.currentBet    = room.bigBlind;
+    room.minRaise      = room.bigBlind;
+    room.lastRaiseSize = room.bigBlind;
+    room.gameState     = 'PLAYING';
+    room.handState     = 'PREFLOP';
 
-    // El primer turno es después del BB (el jugador a la izquierda del BB)
+    // Primer turno: jugador a la izquierda del BB
     let turnIdx = (room.bbIndex + 1) % room.seats.length;
-    while (room.seats[turnIdx] === null || !room.seats[turnIdx]!.active || room.seats[turnIdx]!.isAllIn) {
+    while (room.seats[turnIdx] === null || !room.seats[turnIdx]!.active || room.seats[turnIdx]!.isAllIn)
         turnIdx = (turnIdx + 1) % room.seats.length;
-    }
-    room.turnIndex = turnIdx;
+
+    room.turnIndex        = turnIdx;
     room.actionInProgress = false;
 
-    // Notificar al primer jugador en actuar
-    const firstTurnSeat = room.seats[turnIdx];
-    if (firstTurnSeat) {
-        const callAmount = Math.max(0, room.currentBet - firstTurnSeat.currentBet);
-        io.to(firstTurnSeat.id).emit('yourTurn', {
-            callAmount,
-            minRaise: room.currentBet + room.minRaise,
-            maxRaise: firstTurnSeat.balance + firstTurnSeat.currentBet,
-            currentBet: room.currentBet
-        });
-    }
+    broadcastState(io, roomId);
+    emitYourTurn(io, room, turnIdx);
 
-    // Iniciar timer
     if (room.turnTimer) clearTimeout(room.turnTimer);
     room.turnTimer = setTimeout(() => {
-        const currentPlayerId = room.seats[room.turnIndex]?.id;
-        if (currentPlayerId) {
-            handlePlayerAction(io, roomId, currentPlayerId, 'fold', 0);
-        }
+        const pid = room.seats[room.turnIndex]?.id;
+        if (pid) handlePlayerAction(io, roomId, pid, 'fold', 0);
     }, TURN_TIMEOUT);
-
-    broadcastState(io, roomId);
 }
 
-// Maneja la acción de un jugador (fold, check, call, raise, all-in)
-function handlePlayerAction(io: Server, roomId: string, playerId: string, action: string, amount?: number) {
+// ─────────────────────────────────────────────────────────────
+// HANDLE PLAYER ACTION
+// ─────────────────────────────────────────────────────────────
+
+function handlePlayerAction(io: Server, roomId: string, playerId: string, action: string, amount?: number): void {
     const room = rooms[roomId];
     if (!room || room.gameState !== 'PLAYING' || room.actionInProgress) return;
 
     const seatIndex = room.seats.findIndex(s => s && s.id === playerId);
-    if (seatIndex === -1 || seatIndex !== room.turnIndex) return; // No es su turno
+    if (seatIndex === -1 || seatIndex !== room.turnIndex) return;
 
     const player = room.seats[seatIndex];
     if (!player || !player.active || player.isAllIn) return;
@@ -477,88 +449,120 @@ function handlePlayerAction(io: Server, roomId: string, playerId: string, action
     room.actionInProgress = true;
     if (room.turnTimer) clearTimeout(room.turnTimer);
 
-    // Procesar acción
     let actionValid = true;
-    let betAmount = 0;
-    let actionText = '';
+    let actionText  = '';
 
     switch (action) {
+
         case 'fold':
-            player.active = false;
+            player.active     = false;
             player.lastAction = 'FOLD';
-            actionText = 'se retiró';
+            actionText        = 'se retiró';
             break;
+
         case 'check':
             if (room.currentBet > player.currentBet) {
-                actionValid = false; // No puede check si hay apuesta pendiente
+                actionValid = false;
             } else {
                 player.lastAction = 'CHECK';
-                actionText = 'pasó';
+                actionText        = 'pasó';
             }
             break;
-        case 'call':
-            const callAmount = room.currentBet - player.currentBet;
-            if (callAmount <= 0) {
-                // Si no hay diferencia, es check
+
+        case 'call': {
+            const diff = room.currentBet - player.currentBet;
+            if (diff <= 0) {
                 player.lastAction = 'CHECK';
-                actionText = 'pasó';
+                actionText        = 'pasó';
             } else {
-                const actualCall = Math.min(callAmount, player.balance);
-                player.balance -= actualCall;
-                player.currentBet += actualCall;
-                room.pot += actualCall;
+                const actual = Math.min(diff, player.balance);
+                player.balance    -= actual;
+                player.currentBet += actual;
+                room.pot          += actual;
                 if (player.balance === 0) player.isAllIn = true;
                 player.lastAction = 'CALL';
-                actionText = 'igualó';
+                actionText        = `igualó $${player.currentBet}`;
             }
             break;
-        case 'raise':
-            if (!amount || amount < room.currentBet + room.minRaise) {
-                actionValid = false; // Raise mínimo no cumplido
+        }
+
+        case 'raise': {
+            // Cap: si ya subió MAX_RAISES_PER_STREET veces, no puede subir más
+            if (player.raiseCount >= MAX_RAISES_PER_STREET) {
+                actionValid = false;
+                io.to(player.id).emit('serverLog', {
+                    message: '⚠️ Ya subiste 3 veces. Solo puedes hacer All-In.',
+                    type: 'log-error'
+                });
                 break;
             }
-            betAmount = Math.min(amount, player.balance + player.currentBet); // No puede apostar más de lo que tiene
-            const raiseTotal = betAmount - player.currentBet;
-            player.balance -= raiseTotal;
-            player.currentBet = betAmount;
-            room.pot += raiseTotal;
-            const prevBet = room.currentBet;
-            room.currentBet = betAmount;
-            room.lastRaise = betAmount;
-            // FIX: guardar prevBet antes de actualizarlo, si no minRaise siempre es 0
-            room.minRaise = betAmount - prevBet;
+
+            // Mínimo: 25% del pot sobre el currentBet, o al menos un bigBlind
+            const minIncrement = Math.max(room.bigBlind, Math.floor(room.pot * 0.25));
+            const minTotal     = room.currentBet + minIncrement;
+
+            if (!amount || amount < minTotal) {
+                actionValid = false;
+                io.to(player.id).emit('serverLog', {
+                    message: `⚠️ Raise mínimo: $${minTotal}`,
+                    type: 'log-error'
+                });
+                break;
+            }
+
+            const raiseTotal      = Math.min(amount, player.balance + player.currentBet);
+            const chipsToPut      = raiseTotal - player.currentBet;
+            player.balance       -= chipsToPut;
+            player.currentBet     = raiseTotal;
+            room.pot             += chipsToPut;
+            room.lastRaiseSize    = raiseTotal - room.currentBet;
+            room.currentBet       = raiseTotal;
+            room.minRaise         = Math.max(room.bigBlind, Math.floor(room.pot * 0.25));
+            player.raiseCount    += 1;
+
             if (player.balance === 0) player.isAllIn = true;
             player.lastAction = 'RAISE';
-            actionText = 'subió a ' + betAmount;
-            // Al subir, los demás deben volver a actuar
-            room.seats.forEach(s => {
-                if (s && s.active && !s.isAllIn && s.id !== player.id) s.acted = false;
-            });
-            // BUG FIX 4: Al subir la apuesta, los demás jugadores deben volver a actuar
+            actionText        = `subió a $${raiseTotal}`;
+
+            // Los demás deben volver a actuar
             room.seats.forEach(s => {
                 if (s && s.active && !s.isAllIn && s.id !== player.id) s.acted = false;
             });
             break;
-        case 'allin':
-            const allInAmount = player.balance;
-            player.balance = 0;
-            player.currentBet += allInAmount;
-            room.pot += allInAmount;
+        }
+
+        case 'allin': {
+            const allInChips   = player.balance;
+            player.balance     = 0;
+            player.currentBet += allInChips;
+            room.pot          += allInChips;
+
+            // Si este all-in constituye un raise
             if (player.currentBet > room.currentBet) {
-                room.currentBet = player.currentBet;
-                room.minRaise = player.currentBet - room.currentBet; // Simplificado
+                const raiseSize    = player.currentBet - room.currentBet;
+                room.lastRaiseSize = raiseSize;
+                room.currentBet    = player.currentBet;
+                room.minRaise      = Math.max(room.bigBlind, Math.floor(room.pot * 0.25));
+                // Los demás deben volver a actuar
+                room.seats.forEach(s => {
+                    if (s && s.active && !s.isAllIn && s.id !== player.id) s.acted = false;
+                });
             }
-            player.isAllIn = true;
+
+            player.isAllIn    = true;
             player.lastAction = 'ALL-IN';
-            actionText = 'apostó todo';
+            actionText        = `fue ALL-IN por $${player.currentBet}`;
             break;
+        }
+
         default:
             actionValid = false;
     }
 
     if (!actionValid) {
         room.actionInProgress = false;
-        // Podríamos reenviar el timer
+        // Reenviar el turno
+        if (room.turnTimer) clearTimeout(room.turnTimer);
         room.turnTimer = setTimeout(() => {
             handlePlayerAction(io, roomId, playerId, 'fold', 0);
         }, TURN_TIMEOUT);
@@ -566,31 +570,40 @@ function handlePlayerAction(io: Server, roomId: string, playerId: string, action
     }
 
     player.actionId = (player.actionId || 0) + 1;
-    player.acted = true; // BUG FIX: marcar que actuó en esta ronda
+    player.acted    = true;
     io.to(roomId).emit('serverLog', { message: `🎲 ${player.name} ${actionText}.`, type: 'log-action' });
 
-    // Verificar si la mano terminó (todos los demás se retiraron o all-in)
+    // ¿Solo queda un jugador activo?
     const activePlayers = room.seats.filter(s => s && s.active);
     if (activePlayers.length === 1) {
         endHand(io, roomId, activePlayers[0]!.id);
         return;
     }
 
-    // Si todos los que no están all-in ya actuaron, pasar a la siguiente ronda
+    // ¿Todos los activos están all-in? → ir directo al showdown
+    const allAllIn = activePlayers.every(s => s!.isAllIn);
+    if (allAllIn) {
+        advanceHandStage(io, roomId);
+        return;
+    }
+
+    // ¿Todos los que pueden actuar ya actuaron?
     const playersToAct = room.seats.filter(s => s && s.active && !s.isAllIn);
-    const allActed = playersToAct.every(s => s!.acted);
+    const allActed     = playersToAct.every(s => s!.acted);
+
     if (allActed || playersToAct.length === 0) {
-        // Avanzar etapa
         advanceHandStage(io, roomId);
     } else {
-        // Pasar al siguiente turno
         nextTurn(io, roomId);
     }
 }
 
-// Registro de los handlers de Socket.IO
+// ─────────────────────────────────────────────────────────────
+// SOCKET HANDLERS
+// ─────────────────────────────────────────────────────────────
+
 export function registerGameHandlers(io: Server, socket: Socket) {
-    // Crear una nueva sala
+
     socket.on('createRoom', ({ address, name, type, visibility }: { address: string; name?: string; type?: string; visibility?: string }) => {
         const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
         rooms[roomId] = {
@@ -614,27 +627,22 @@ export function registerGameHandlers(io: Server, socket: Socket) {
             smallBlind: SMALL_BLIND,
             bigBlind: BIG_BLIND,
             minRaise: BIG_BLIND,
-            lastRaise: 0,
-            actionInProgress: false
+            lastRaiseSize: BIG_BLIND,
+            actionInProgress: false,
         };
-
         joinClientToRoom(io, socket, roomId, address, name);
         updateGlobalLobby(io);
     });
 
-    // Unirse a una sala existente (por código)
     socket.on('joinRoom', ({ roomId, address, name }: { roomId: string; address?: string; name?: string }) => {
         joinClientToRoom(io, socket, roomId, address, name);
     });
 
-    // Sentarse en un asiento
     socket.on('sitDown', (seatIndex: number) => {
         const roomId = getRoomId(socket);
         if (!roomId) return;
         const room = rooms[roomId];
         if (!room || room.gameState !== 'WAITING' || room.seats[seatIndex] !== null) return;
-        
-        // Verificar que el jugador no esté ya sentado
         if (room.seats.some(s => s && s.id === socket.id)) return;
 
         const client = room.clients[socket.id];
@@ -652,7 +660,8 @@ export function registerGameHandlers(io: Server, socket: Socket) {
             isAllIn: false,
             lastAction: '',
             actionId: 0,
-            sittingOut: false
+            sittingOut: false,
+            raiseCount: 0,
         };
 
         io.to(roomId).emit('serverLog', { message: `🪙 ${client.name} se sentó en la mesa.`, type: 'log-info' });
@@ -660,117 +669,85 @@ export function registerGameHandlers(io: Server, socket: Socket) {
         updateGlobalLobby(io);
     });
 
-    // Acción del jugador (fold, check, call, raise, allin)
     socket.on('playerAction', (actionData: { action: string; amount?: number }) => {
         const roomId = getRoomId(socket);
         if (!roomId) return;
         const room = rooms[roomId];
         if (!room) return;
-
-        // Verificar que el socket corresponde al jugador cuyo turno es
         const playerSeat = room.seats.find(s => s && s.id === socket.id);
         if (!playerSeat) return;
-
         handlePlayerAction(io, roomId, socket.id, actionData.action, actionData.amount);
     });
 
-    // Chat
     socket.on('sendChat', (msg: string) => {
         const roomId = getRoomId(socket);
         if (roomId) {
             const client = rooms[roomId]?.clients[socket.id];
-            io.to(roomId).emit('receiveChat', { 
-                user: client?.name || 'Desconocido', 
-                message: msg 
-            });
+            io.to(roomId).emit('receiveChat', { user: client?.name || 'Desconocido', message: msg });
         }
     });
 
-    // Matchmaking: buscar una sala pública con espacio
     socket.on('requestMatchmaking', () => {
         const availableRooms = Object.values(rooms).filter(r =>
-            r.isPublic &&
-            r.gameState === 'WAITING' &&
-            r.seats.filter(s => s !== null).length < 6
+            r.isPublic && r.gameState === 'WAITING' && r.seats.filter(s => s !== null).length < 6
         );
-
         if (availableRooms.length === 0) {
-            return socket.emit('serverLog', { message: "❌ No hay salas públicas disponibles. ¡Crea una!", type: 'log-error' });
+            return socket.emit('serverLog', { message: "❌ No hay salas públicas disponibles.", type: 'log-error' });
         }
-
-        // Ordenar por las que tienen más jugadores (para llenar rápido)
-        availableRooms.sort((a, b) => {
-            const countA = a.seats.filter(s => s !== null).length;
-            const countB = b.seats.filter(s => s !== null).length;
-            return countB - countA;
-        });
-
-        const best = availableRooms[0];
-        if (best) socket.emit('matchmakingResult', best.id);
+        availableRooms.sort((a, b) =>
+            b.seats.filter(s => s !== null).length - a.seats.filter(s => s !== null).length
+        );
+        socket.emit('matchmakingResult', availableRooms[0].id);
     });
 
-    // Iniciar juego (solo el host)
     socket.on('startGameRequest', () => {
         const roomId = getRoomId(socket);
         if (!roomId) return;
         const room = rooms[roomId];
         if (!room || room.host !== socket.id) return;
-
-        const playersCount = room.seats.filter(s => s !== null).length;
-        if (playersCount < 2) {
+        if (room.seats.filter(s => s !== null).length < 2) {
             io.to(roomId).emit('serverLog', { message: 'Se necesitan al menos 2 jugadores', type: 'log-error' });
             return;
         }
-
         startNewHand(io, roomId);
     });
 
-    // Manejar desconexión
     socket.on('disconnect', () => {
-        // Buscar en qué sala estaba este socket
         for (const roomId in rooms) {
             const room = rooms[roomId];
-            if (room.clients[socket.id]) {
-                // Era un cliente (espectador o jugador)
-                delete room.clients[socket.id];
+            if (!room.clients[socket.id]) continue;
 
-                // Si estaba sentado, lo sacamos del asiento
-                const seatIndex = room.seats.findIndex(s => s && s.id === socket.id);
-                if (seatIndex !== -1) {
-                    const playerName = room.seats[seatIndex]!.name;
-                    room.seats[seatIndex] = null;
-                    io.to(roomId).emit('serverLog', { message: `🚪 ${playerName} abandonó la mesa.`, type: 'log-info' });
+            delete room.clients[socket.id];
+            const seatIndex = room.seats.findIndex(s => s && s.id === socket.id);
 
-                    // Si era el host, asignar nuevo host (el primer jugador sentado o el primer espectador)
-                    if (room.host === socket.id) {
-                        const firstSeat = room.seats.find(s => s !== null);
-                        if (firstSeat) {
-                            room.host = firstSeat.id;
-                        } else {
-                            // Si no hay jugadores, el primer espectador
-                            const firstClient = Object.keys(room.clients)[0];
-                            if (firstClient) room.host = firstClient;
-                        }
+            if (seatIndex !== -1) {
+                const playerName = room.seats[seatIndex]!.name;
+                room.seats[seatIndex] = null;
+                io.to(roomId).emit('serverLog', { message: `🚪 ${playerName} abandonó la mesa.`, type: 'log-info' });
+
+                if (room.host === socket.id) {
+                    const first = room.seats.find(s => s !== null);
+                    if (first) room.host = first.id;
+                    else {
+                        const firstClient = Object.keys(room.clients)[0];
+                        if (firstClient) room.host = firstClient;
                     }
-
-                    // Si el juego estaba en curso y este jugador estaba activo, hay que manejarlo
-                    if (room.gameState === 'PLAYING') {
-                        // Lo consideramos como fold
-                        handlePlayerAction(io, roomId, socket.id, 'fold', 0);
-                    }
-
-                    broadcastState(io, roomId);
-                    updateGlobalLobby(io);
                 }
 
-                // Si la sala se queda sin clientes, la eliminamos (opcional)
-                if (Object.keys(room.clients).length === 0) {
-                    if (room.turnTimer) clearTimeout(room.turnTimer);
-                    delete rooms[roomId];
-                    updateGlobalLobby(io);
+                if (room.gameState === 'PLAYING') {
+                    handlePlayerAction(io, roomId, socket.id, 'fold', 0);
                 }
-                break;
+
+                broadcastState(io, roomId);
+                updateGlobalLobby(io);
             }
+
+            if (Object.keys(room.clients).length === 0) {
+                if (room.turnTimer) clearTimeout(room.turnTimer);
+                delete rooms[roomId];
+                updateGlobalLobby(io);
+            }
+            break;
         }
     });
 }
