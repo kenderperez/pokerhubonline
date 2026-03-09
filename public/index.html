@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web3 Poker PRO - Premium Lobby</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+<!-- PANTALLA DE CARGA 3D (Oculta por defecto) -->
+    <div id="loading-screen">
+        <div id="canvas-container"></div>
+        <div class="vignette"></div>
+        <div class="loading-text">Entrando a la mesa...</div>
+    </div>
+
+    <!-- LOBBY DINÁMICO -->
+    <div id="lobby-overlay">
+        <div class="lobby-box">
+            <img src="./pokerhub.png" alt="logo pokerhub" width="170">
+            
+            <!-- Paso 1: Configuración de Perfil -->
+            <div id="profile-setup">
+                <p style="color:var(--text-muted); font-size:12px; margin-bottom:20px;">Ingresa tu nombre para comenzar</p>
+                <input type="text" id="player-name" class="lobby-input" placeholder="Tu Nombre / Nickname">
+                <button class="btn-act" style="background:linear-gradient(90deg, #ff0000, #f53); width:100%; font-size:16px; margin-top:10px;" onclick="connectWallet()">CONECTAR Y ENTRAR</button>
+            </div>
+
+            <!-- Paso 2: Controles del Lobby -->
+            <div id="lobby-controls" style="display:none; margin-top:20px;">
+                
+                <!-- Matchmaking -->
+                <button class="btn-act" style="background:linear-gradient(90deg, #ff0000, #f53);  color:rgb(255, 253, 253); width:100%; margin-bottom:20px; font-size: 16px; height: 50px;" onclick="startMatchmaking()">
+                    ⚡ PARTIDA RÁPIDA (Matchmaking)
+                </button>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                    <div style="text-align: left;">
+                        <label style="color: #888; font-size: 10px; font-weight: bold; margin-left: 5px;">TIPO DE FICHA</label>
+                        <select id="room-type-select" class="lobby-input">
+                            <option value="free">GRATIS</option>
+                            <option value="paid">PAID (CRYPTO)</option>
+                        </select>
+                    </div>
+                    <div style="text-align: left;">
+                        <label style="color: #888; font-size: 10px; font-weight: bold; margin-left: 5px;">VISIBILIDAD</label>
+                        <select id="room-visibility-select" class="lobby-input">
+                            <option value="public">PÚBLICA</option>
+                            <option value="private">PRIVADA</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button class="btn-act" style="background:linear-gradient(90deg, #ff0000, #f53); width:100%; margin-bottom:20px;" onclick="createRoom()">
+                    ➕ CREAR NUEVA SALA
+                </button>
+                
+                <!-- Lista de Salas Públicas -->
+                <div style="margin: 15px 0; border-top: 1px solid #333; padding-top: 15px;">
+                    <div style="color:var(--gold); font-size: 12px; font-weight: bold; margin-bottom: 10px; text-align: left; display: flex; justify-content: space-between;">
+                        <span>🌐 SALAS PÚBLICAS</span>
+                        <span style="color: #555; font-weight: normal; font-size: 10px;">Actualizado en vivo</span>
+                    </div>
+                    <div id="public-rooms-list" style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 5px;">
+                        <!-- Se llena dinámicamente con JS -->
+                        <div style="color:#555; font-size:11px; text-align:center; padding:20px;">Cargando salas...</div>
+                    </div>
+                </div>
+
+                <!-- Unirse por código (Privadas) -->
+                <div style="margin-top: 20px; display: flex; gap: 5px;">
+                    <input type="text" id="room-input" placeholder="CÓDIGO PRIVADO" class="lobby-input" style="flex: 2; margin: 0;">
+                    <button class="btn-act" style="background:#333; flex: 1;" onclick="joinRoom()">UNIRSE</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- INTERFAZ DE JUEGO -->
+    <div class="sidebar-left">
+        <div style="padding:20px; border-bottom:1px solid #222; font-weight:bold; color:var(--gold);">📜 EVENTOS DE MESA</div>
+        <div id="game-logs"></div>
+    </div>
+
+    <div class="main-content">
+        <div class="top-header" style="padding: 20px; display: flex; justify-content: space-between; border-bottom: 1px solid #222;">
+            <img src="./pokerhubhorizontal.png" alt="logo pokerhub" width="160">
+            <div id="room-info-display" style="color:#ff0000; font-weight:bold;">SALA: ---</div>
+             <div style="display: flex;">
+                <div id="ficha" style="display: flex;"><img src="pokerhubchip.svg" alt="Descripción de la imagen" width="20" height="20">
+                <div id="my-balance" style="margin-left: 10px; color:white; font-weight:bold; font-size:18px;">$0</div>
+            </div>
+            
+</div>
+           
+            
+        </div>
+
+        <div class="poker-area">
+            <div class="poker-table" id="poker-table">
+                <div class="pot-container">
+                    <div class="pot-badge" id="pot-display">
+                        <div class="poker-chip chip-paid"></div>
+                            <span id="pot-text-content">0.0 BB ($0)</span>
+                        </div>
+                    <div id="community-cards" style="display:flex; gap:10px; margin-top:20px; justify-content:center; min-height: 65px;"></div>
+                </div>
+            </div>
+
+            <!-- PANEL DE ACCIONES -->
+            <div class="action-board" id="action-panel">
+                <div style="background: #111; padding: 10px; border-radius: 10px;">
+                    <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:5px;">
+                        <span>SUBIR A: <b id="raise-val-cash">$0</b></span>
+                        <b id="raise-val-bb" style="color:var(--accent-green);">0 BB</b>
+                    </div>
+                    <input type="range" min="40" max="1000" value="40" class="raise-slider" id="raise-slider" oninput="updateRaiseLabels()">
+                    
+                    <div class="quick-bet-row">
+                        <button class="btn-quick" onclick="setRaisePercent(0.25)">25%</button>
+                        <button class="btn-quick" onclick="setRaisePercent(0.50)">50%</button>
+                        <button class="btn-quick" onclick="setRaisePercent(0.75)">75%</button>
+                        <button class="btn-quick" onclick="setRaisePercent(1.0)">POT</button>
+                        <button class="btn-quick" onclick="setRaiseBB(2)">2BB</button>
+                        <button class="btn-quick" onclick="setRaiseBB(3)">3BB</button>
+                        <button class="btn-quick" onclick="setRaiseBB(5)">5BB</button>
+                        <button class="btn-quick" onclick="setRaiseBB(10)">10BB</button>
+                    </div>
+                </div>
+                <div style="display:flex; gap:6px;">
+                    <button class="btn-act btn-fold" onclick="sendAction('fold')">FOLD</button>
+                    <button class="btn-act btn-call" id="call-btn" onclick="sendAction('call')">CHECK</button>
+                    <button class="btn-act btn-raise" onclick="sendAction('raise')">RAISE</button>
+                    <button class="btn-act btn-allin" onclick="sendAction('allin')">ALL IN</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar-right">
+        <!-- LEADERBOARD -->
+        <div style="padding:15px; border-bottom:1px solid #222; background: rgba(0,0,0,0.2);">
+            <div style="font-size: 12px; font-weight: bold; color: var(--gold); margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                🏆 TOP GANADORES
+            </div>
+            <div id="leaderboard-list" style="display: flex; flex-direction: column; gap: 5px;">
+                <!-- Se llena con JS -->
+            </div>
+        </div>
+
+        <button id="start-btn" onclick="socket.emit('startGameRequest')" style="display:none; margin:20px; padding:15px; background:var(--accent-green); border:none; border-radius:10px; font-weight:bold; cursor:pointer; color:black;">▶ INICIAR PARTIDA</button>
+        
+        <!-- CHAT -->
+        <div style="flex:1; display:flex; flex-direction:column;">
+            <div style="padding:20px; border-bottom:1px solid #222; font-weight:bold; color:var(--accent-purple);">💬 CHAT</div>
+            <div id="chat-messages"></div>
+            <div style="padding:10px; background:#111;">
+                <input type="text" id="chat-input" placeholder="Mensaje..." style="width:100%; background:none; border:none; color:white; outline:none;" onkeypress="if(event.key==='Enter') sendChat()">
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

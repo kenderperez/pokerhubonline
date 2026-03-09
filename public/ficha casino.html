@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lluvia de Fichas 3D - Gravedad Lenta y Bordes Suaves</title>
+    <style>
+        /* =========================================
+           CONFIGURACIÓN DEL ESPACIO 3D
+           ========================================= */
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+            background: radial-gradient(circle at center, #1e5a28 0%, #061708 100%);
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+            perspective: 1000px; /* Profundidad de cámara ajustada */
+            perspective-origin: 50% 50%;
+        }
+
+        :root {
+            --blanco: #f0f0eb;
+            --negro: #151515;
+            --rojo: #d30000;
+            --tamano: 130px;
+        }
+
+        /* Contenedor que maneja la CAÍDA (Eje Y) */
+        .contenedor-caida {
+            position: absolute;
+            top: -200px;
+            transform-style: preserve-3d;
+            animation: caer linear forwards;
+            /* Añadimos un poco de suavidad al renderizado 3D */
+            will-change: transform; 
+        }
+
+        /* Contenedor que maneja la ROTACIÓN 3D */
+        .contenedor-rotacion {
+            width: var(--tamano);
+            height: var(--tamano);
+            transform-style: preserve-3d;
+            animation: rotar linear infinite forwards;
+            will-change: transform;
+        }
+
+        /* =========================================
+           CONSTRUCCIÓN DEL CILINDRO 3D LISO (GROSOR)
+           ========================================= */
+        .capa-grosor {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            /* Patrón con bordes suavizados (0.5deg de transición) para evitar pixelado */
+            background: repeating-conic-gradient(
+                from -15deg,
+                var(--negro) 0deg 29.5deg,
+                var(--blanco) 30deg 59.5deg,
+                var(--negro) 60deg
+            );
+            filter: brightness(0.35) contrast(1.1);
+            
+            /* EL TRUCO MÁGICO PARA BORDES LISOS:
+               Esta sombra minúscula difumina el espacio entre cada capa,
+               eliminando el aspecto "poligonal" y creando un borde sólido. */
+            box-shadow: 0 0 2px rgba(0,0,0,0.9);
+        }
+
+        /* =========================================
+           CARAS FRONTALES Y TRASERAS
+           ========================================= */
+        .cara {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            background: repeating-conic-gradient(
+                from -15deg,
+                var(--negro) 0deg 29.5deg,
+                var(--blanco) 30deg 59.5deg,
+                var(--negro) 60deg
+            );
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            /* Sombra interna para el borde y externa sutil para el anti-aliasing (suavizado) */
+            box-shadow: inset 0 0 0 4px var(--negro), inset 0 0 12px rgba(0,0,0,0.8), 0 0 1px rgba(0,0,0,0.5);
+            backface-visibility: hidden; 
+        }
+
+        /* Ahora las caras tapan exactamente el cilindro de capas densas */
+        .cara-frente {
+            transform: translateZ(9px);
+        }
+        .cara-dorso {
+            transform: translateZ(-9px) rotateY(180deg) rotateZ(45deg);
+        }
+
+        /* Diseño interior (Sticker) */
+        .corte-blanco {
+            width: 74%; height: 74%;
+            background-color: var(--blanco);
+            border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: inset 0 0 8px rgba(0,0,0,0.4);
+        }
+
+        .centro-rojo {
+            width: 82%; height: 82%;
+            background-color: var(--rojo);
+            border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: inset 0 3px 8px rgba(0,0,0,0.7);
+        }
+
+        .pica {
+            color: var(--blanco);
+            font-size: 55px;
+            line-height: 0;
+            margin-top: -3px;
+            filter: drop-shadow(0px 1px 1px rgba(0,0,0,0.5));
+        }
+
+        /* =========================================
+           ANIMACIONES CLAVE (GRAVEDAD LENTA)
+           ========================================= */
+        @keyframes caer {
+            0% { transform: translate3d(var(--posX), -300px, var(--posZ)) scale(var(--escala)); }
+            100% { transform: translate3d(var(--posX), 120vh, var(--posZ)) scale(var(--escala)); }
+        }
+
+        @keyframes rotar {
+            0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+            100% { transform: rotateX(var(--giroX)) rotateY(var(--giroY)) rotateZ(var(--giroZ)); }
+        }
+    </style>
+</head>
+<body>
+
+    <script>
+        // Reducimos un poco la cantidad máxima para asegurar que fluya a 60 FPS
+        // ya que ahora la ficha tiene EL DOBLE de densidad (calidad alta).
+        const cantidadFichas = 25; 
+        let fichasActivas = 0;
+
+        function crearFicha() {
+            if (fichasActivas >= cantidadFichas) return;
+
+            const contenedorCaida = document.createElement('div');
+            contenedorCaida.classList.add('contenedor-caida');
+
+            const contenedorRotacion = document.createElement('div');
+            contenedorRotacion.classList.add('contenedor-rotacion');
+
+            // -------------------------------------------------------------
+            // MEJORA DE CALIDAD: Generamos 36 capas separadas por 0.5px
+            // Esto duplica la resolución del cilindro eliminando la "escalera"
+            // -------------------------------------------------------------
+            for (let i = -18; i <= 18; i++) {
+                const z = i * 0.5; // Pasos de 0.5 píxeles en lugar de 1 entero
+                const capaGrosor = document.createElement('div');
+                capaGrosor.classList.add('capa-grosor');
+                capaGrosor.style.transform = `translateZ(${z}px)`;
+                contenedorRotacion.appendChild(capaGrosor);
+            }
+
+            // Diseño de las caras
+            const diseñoCara = `
+                <div class="corte-blanco">
+                    <div class="centro-rojo">
+                        <div class="pica">♠</div>
+                    </div>
+                </div>
+            `;
+            
+            const caraFrente = document.createElement('div');
+            caraFrente.classList.add('cara', 'cara-frente');
+            caraFrente.innerHTML = diseñoCara;
+
+            const caraDorso = document.createElement('div');
+            caraDorso.classList.add('cara', 'cara-dorso');
+            caraDorso.innerHTML = diseñoCara;
+
+            contenedorRotacion.appendChild(caraFrente);
+            contenedorRotacion.appendChild(caraDorso);
+            contenedorCaida.appendChild(contenedorRotacion);
+
+            // --- FÍSICAS DE GRAVEDAD LENTA ---
+            
+            const posX = (Math.random() * 90 + 5) + 'vw';
+            const posZ = (Math.random() * 800 - 400) + 'px'; 
+            const escala = Math.random() * 0.6 + 0.4;
+            
+            // Gravedad ajustada: de 8 a 15 segundos (mucho más lento y majestuoso)
+            const tiempoCaida = Math.random() * 7 + 8; 
+
+            // Rotación más suave acorde a la velocidad lenta
+            const giroX = (Math.random() * 720 + 360) * (Math.random() > 0.5 ? 1 : -1) + 'deg';
+            const giroY = (Math.random() * 720 + 360) * (Math.random() > 0.5 ? 1 : -1) + 'deg';
+            const giroZ = (Math.random() * 360) + 'deg';
+
+            // --- APLICAR ESTILOS ---
+            contenedorCaida.style.setProperty('--posX', posX);
+            contenedorCaida.style.setProperty('--posZ', posZ);
+            contenedorCaida.style.setProperty('--escala', escala);
+            // Aplicamos el tiempo de caída largo
+            contenedorCaida.style.animationDuration = `${tiempoCaida}s`;
+
+            contenedorRotacion.style.setProperty('--giroX', giroX);
+            contenedorRotacion.style.setProperty('--giroY', giroY);
+            contenedorRotacion.style.setProperty('--giroZ', giroZ);
+            contenedorRotacion.style.animationDuration = `${tiempoCaida}s`;
+
+            document.body.appendChild(contenedorCaida);
+            fichasActivas++;
+
+            // Eliminar elemento para ahorrar RAM
+            setTimeout(() => {
+                contenedorCaida.remove();
+                fichasActivas--;
+            }, tiempoCaida * 1000);
+        }
+
+        // Aparece una ficha nueva cada 350 milisegundos para no saturar la pantalla
+        // dado que ahora tardan más en caer.
+        setInterval(crearFicha, 350);
+
+    </script>
+</body>
+</html>
