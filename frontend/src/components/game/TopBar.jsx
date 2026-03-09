@@ -9,6 +9,7 @@ export default function TopBar() {
   const handleExit = () => {
     socket.disconnect()
     setPage('lobby')
+    setTimeout(() => socket.connect(), 100)
   }
 
   return (

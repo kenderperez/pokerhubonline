@@ -28,7 +28,7 @@ export const useGameStore = create((set, get) => ({
       if (mySeat.holeCards?.length > 0) set({ myCards: mySeat.holeCards })
       if (mySeat.balance !== undefined) set({ myBalance: mySeat.balance })
     }
-    if (data.bigBlind) set({ BB_VALUE: data.bigBlind * 2 })
+    if (data.bigBlind) set({ BB_VALUE: data.bigBlind })
   },
   setMyCards:   (c) => set({ myCards: c }),
   setMyBalance: (b) => set({ myBalance: b }),

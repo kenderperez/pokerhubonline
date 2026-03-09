@@ -1,20 +1,38 @@
-import { useState }      from 'react'
+import { useState, useEffect } from 'react'
 import { useGameStore }  from '../../store/gameStore.js'
 import { socket }        from '../../socket/socket.js'
 
 export default function ActionPanel() {
-  const { isMyTurn, turnData, gameState, myBalance, BB_VALUE, clearTurn } = useGameStore()
+  const { isMyTurn, turnData, gameState, myBalance, BB_VALUE } = useGameStore()
   const [raiseVal, setRaiseVal] = useState(turnData?.minRaise || 20)
+  const [sending, setSending]   = useState(false)
 
+  // ── Todos los hooks ANTES de cualquier return condicional ──
+
+  // Resetear slider y estado de envío cuando llega un nuevo turno
+  useEffect(() => {
+    if (turnData?.minRaise) setRaiseVal(turnData.minRaise)
+    setSending(false)
+  }, [turnData?.minRaise])
+
+  // Re-habilitar botones si el servidor rechaza la acción y re-emite yourTurn
+  useEffect(() => {
+    const onYourTurn = () => setSending(false)
+    socket.on('yourTurn', onYourTurn)
+    return () => socket.off('yourTurn', onYourTurn)
+  }, [])
+
+  // ── Early return después de todos los hooks ──
   if (!isMyTurn || !turnData) return null
 
   const { callAmount = 0, minRaise = 20, maxRaise = myBalance } = turnData
-  const pot = gameState?.pot || 0
-  const toBB = (v) => (v / BB_VALUE).toFixed(1) + ' BB'
+  const pot   = gameState?.pot || 0
+  const toBB  = (v) => (v / BB_VALUE).toFixed(1) + ' BB'
 
   const send = (action, amount = 0) => {
+    if (sending) return
+    setSending(true)
     socket.emit('playerAction', { action, amount })
-    clearTurn()
   }
 
   const setPercent = (pct) => {
@@ -61,26 +79,34 @@ export default function ActionPanel() {
       <div className="grid grid-cols-4 gap-2">
         <button
           onClick={() => send('fold')}
+          disabled={sending}
           className="bg-red-900/80 border border-red-800 text-white text-[11px]
-                     font-bold py-2.5 rounded-lg hover:bg-red-800 transition-all active:scale-95">
+                     font-bold py-2.5 rounded-lg hover:bg-red-800 transition-all active:scale-95
+                     disabled:opacity-50 disabled:cursor-not-allowed">
           ✕ RETIRARSE
         </button>
         <button
           onClick={() => send(callAmount > 0 ? 'call' : 'check')}
+          disabled={sending}
           className="bg-yellow-600/80 border border-yellow-600 text-black text-[11px]
-                     font-bold py-2.5 rounded-lg hover:bg-yellow-500 transition-all active:scale-95">
+                     font-bold py-2.5 rounded-lg hover:bg-yellow-500 transition-all active:scale-95
+                     disabled:opacity-50 disabled:cursor-not-allowed">
           {callAmount > 0 ? `📞 $${callAmount}` : '✓ PASAR'}
         </button>
         <button
           onClick={() => send('raise', raiseVal)}
+          disabled={sending}
           className="bg-green-800/80 border border-green-700 text-white text-[11px]
-                     font-bold py-2.5 rounded-lg hover:bg-green-700 transition-all active:scale-95">
+                     font-bold py-2.5 rounded-lg hover:bg-green-700 transition-all active:scale-95
+                     disabled:opacity-50 disabled:cursor-not-allowed">
           ↑ SUBIR
         </button>
         <button
           onClick={() => send('allin', myBalance)}
+          disabled={sending}
           className="text-white text-[11px] font-bold py-2.5 rounded-lg
-                     hover:brightness-110 transition-all active:scale-95"
+                     hover:brightness-110 transition-all active:scale-95
+                     disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ background: 'linear-gradient(45deg, #c0392b, #ff4757)', border: '1px solid #ff9f43' }}>
           ⚡ ALL-IN
         </button>

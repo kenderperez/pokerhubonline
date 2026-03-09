@@ -8,7 +8,10 @@ export default function LobbyScreen() {
   const { playerName, setPlayerName } = useGameStore()
 
   useEffect(() => {
-    socket.emit('getPublicRooms')
+    const requestRooms = () => socket.emit('getPublicRooms')
+    requestRooms()
+    socket.on('connect', requestRooms)
+    return () => socket.off('connect', requestRooms)
   }, [])
 
   const handleLogout = () => {

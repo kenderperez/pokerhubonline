@@ -302,7 +302,7 @@ function advanceHandStage(io: Server, roomId: string): void {
 // END HAND
 // ─────────────────────────────────────────────────────────────
 
-function endHand(io: Server, roomId: string, winnerIds: string | string[]): void {
+function endHand(io: Server, roomId: string, winnerIds: string | string[], autoRestart = true): void {
     const room = rooms[roomId];
     if (!room) return;
 
@@ -342,9 +342,14 @@ function endHand(io: Server, roomId: string, winnerIds: string | string[]): void
 
     broadcastState(io, roomId);
 
-    setTimeout(() => {
-        if (rooms[roomId]?.gameState === 'HAND_OVER') startNewHand(io, roomId);
-    }, 5000);
+    if (autoRestart) {
+        setTimeout(() => {
+            if (rooms[roomId]?.gameState === 'HAND_OVER') startNewHand(io, roomId);
+        }, 5000);
+    } else {
+        room.gameState = 'WAITING';
+        broadcastState(io, roomId);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -561,7 +566,8 @@ function handlePlayerAction(io: Server, roomId: string, playerId: string, action
 
     if (!actionValid) {
         room.actionInProgress = false;
-        // Reenviar el turno
+        // Re-emitir yourTurn para que el cliente restaure el ActionPanel
+        emitYourTurn(io, room, seatIndex);
         if (room.turnTimer) clearTimeout(room.turnTimer);
         room.turnTimer = setTimeout(() => {
             handlePlayerAction(io, roomId, playerId, 'fold', 0);
@@ -667,6 +673,18 @@ export function registerGameHandlers(io: Server, socket: Socket) {
         io.to(roomId).emit('serverLog', { message: `🪙 ${client.name} se sentó en la mesa.`, type: 'log-info' });
         broadcastState(io, roomId);
         updateGlobalLobby(io);
+
+        // Auto-start: si hay 2+ jugadores sentados, iniciar en 5 segundos
+        const seatedCount = room.seats.filter(s => s !== null).length;
+        if (seatedCount >= 2 && room.gameState === 'WAITING') {
+            io.to(roomId).emit('serverLog', { message: `⏳ Partida iniciando en 5 segundos...`, type: 'log-info' });
+            setTimeout(() => {
+                if (rooms[roomId]?.gameState === 'WAITING' &&
+                    rooms[roomId].seats.filter(s => s !== null).length >= 2) {
+                    startNewHand(io, roomId);
+                }
+            }, 5000);
+        }
     });
 
     socket.on('playerAction', (actionData: { action: string; amount?: number }) => {
@@ -722,11 +740,9 @@ export function registerGameHandlers(io: Server, socket: Socket) {
 
             if (seatIndex !== -1) {
                 const playerName = room.seats[seatIndex]!.name;
-                room.seats[seatIndex] = null;
-                io.to(roomId).emit('serverLog', { message: `🚪 ${playerName} abandonó la mesa.`, type: 'log-info' });
 
                 if (room.host === socket.id) {
-                    const first = room.seats.find(s => s !== null);
+                    const first = room.seats.find(s => s !== null && s.id !== socket.id);
                     if (first) room.host = first.id;
                     else {
                         const firstClient = Object.keys(room.clients)[0];
@@ -735,10 +751,50 @@ export function registerGameHandlers(io: Server, socket: Socket) {
                 }
 
                 if (room.gameState === 'PLAYING') {
-                    handlePlayerAction(io, roomId, socket.id, 'fold', 0);
+                    // Limpiar timer del turno
+                    if (room.turnTimer) clearTimeout(room.turnTimer);
+
+                    // Quitar al jugador de la mesa
+                    room.seats[seatIndex] = null;
+                    io.to(roomId).emit('serverLog', { message: `🚪 ${playerName} abandonó la mesa.`, type: 'log-info' });
+
+                    // Ver cuántos jugadores activos quedan
+                    const remaining = room.seats.filter(s => s && s.active);
+
+                    if (remaining.length === 1) {
+                        // Un jugador queda: gana el pot y se para la partida (sin auto-restart)
+                        io.to(roomId).emit('serverLog', {
+                            message: `🏆 ${remaining[0]!.name} gana $${room.pot} por abandono.`,
+                            type: 'log-success'
+                        });
+                        endHand(io, roomId, remaining[0]!.id, false);
+                    } else if (remaining.length === 0) {
+                        // No quedan jugadores activos
+                        room.gameState = 'WAITING';
+                        room.handState = 'WAITING';
+                        room.pot = 0;
+                        room.currentBet = 0;
+                        broadcastState(io, roomId);
+                    } else {
+                        // Quedan 2+ jugadores: si era su turno, pasar al siguiente
+                        if (seatIndex === room.turnIndex) {
+                            nextTurn(io, roomId);
+                        } else {
+                            // Verificar si la mano puede continuar
+                            const playersToAct = remaining.filter(s => !s!.isAllIn);
+                            const allActed = playersToAct.every(s => s!.acted);
+                            if (allActed || playersToAct.length <= 1) {
+                                advanceHandStage(io, roomId);
+                            }
+                        }
+                        broadcastState(io, roomId);
+                    }
+                } else {
+                    room.seats[seatIndex] = null;
+                    io.to(roomId).emit('serverLog', { message: `🚪 ${playerName} abandonó la mesa.`, type: 'log-info' });
+                    broadcastState(io, roomId);
                 }
 
-                broadcastState(io, roomId);
                 updateGlobalLobby(io);
             }
 
