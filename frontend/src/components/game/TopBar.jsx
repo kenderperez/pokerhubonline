@@ -9,12 +9,11 @@ export default function TopBar() {
   const handleExit = () => {
     socket.disconnect()
     setPage('lobby')
-    setTimeout(() => socket.connect(), 100)
   }
 
   return (
-    <div className="flex items-center justify-between px-5 py-2
-                    bg-[#0a1020] border-b border-[#1a2940] z-40">
+    <div className="flex items-center justify-between px-5 py-1.5
+                    bg-[#0a1020] border-b border-[#1a2940]">
 
       {/* Salir */}
       <button
@@ -27,7 +26,7 @@ export default function TopBar() {
       <img
         src="/assets/adsdsa.png"
         alt="PokerHub"
-        className="h-10 object-contain"
+        className="h-7 object-contain"
       />
 
       {/* Balance con pokerhubchip.png */}

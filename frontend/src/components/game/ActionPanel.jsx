@@ -41,7 +41,7 @@ export default function ActionPanel() {
   }
 
   return (
-    <div className="fixed bottom-4 left-4 z-50
+    <div className="fixed bottom-4 right-4 z-50
                     bg-[#0d1626] border border-[#1a2940] rounded-2xl p-4
                     w-85 shadow-2xl shadow-black/60">
 
