@@ -40,18 +40,20 @@ export function useSocket() {
     })
 
     socket.on('roomJoined', (data) => {
-      console.log('[Socket] ✅ roomJoined recibido:', data)
       const { roomId, isHost, type } = data
-      setRoom({ roomId, type, isHost })
-      setLoading(false)
-      setPage('game')
-    })
+        setRoom({ roomId, type, isHost })
+        setTimeout(() => {
+          setLoading(false)
+          setPage('game')
+        }, 2400)                
+})
 
     socket.on('matchmakingResult', (roomId) => {
-      console.log('[Socket] matchmakingResult:', roomId)
       const { playerName } = useGameStore.getState()
-      socket.emit('joinRoom', { roomId, name: playerName, address: '' })
-    })
+      setTimeout(() => {
+        socket.emit('joinRoom', { roomId, name: playerName, address: playerName })
+      }, 1500)  
+})
 
     socket.on('publicRooms', (rooms) => {
       setPublicRooms(rooms || [])

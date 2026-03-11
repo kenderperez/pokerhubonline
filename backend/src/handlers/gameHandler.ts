@@ -1,3 +1,5 @@
+import { createRoom as dbCreateRoom, saveHand, getHandCount } from '../services/handService.js';
+import { getOrCreateUser, recordWin, recordLoss, upsertLeaderboard } from '../services/userService.js';
 import { Server, Socket } from 'socket.io';
 import { PokerEngine } from '../engine/pokerEngine.js';
 
@@ -117,7 +119,7 @@ function joinClientToRoom(io: Server, socket: Socket, roomId: string, address?: 
     const room = rooms[roomId];
     if (!room) { socket.emit('error', 'Sala no encontrada'); return false; }
 
-    room.clients[socket.id] = { id: socket.id, address: address || '', name: name || 'Jugador' };
+    room.clients[socket.id] = { id: socket.id, address: address || name || socket.id, name: name || 'Jugador' };
     socket.join(roomId);
     socket.emit('roomJoined', { roomId, isHost: room.host === socket.id, type: room.type });
     io.to(roomId).emit('serverLog', { message: `👁️ ${name || 'Jugador'} entró como espectador.`, type: 'log-info' });
@@ -322,6 +324,52 @@ function endHand(io: Server, roomId: string, winnerIds: string | string[], autoR
             }
         });
     }
+
+    // ── Guardar mano en DB ────────────────────────────────────
+    const winnerIdArr  = typeof winnerIds === 'string' ? [winnerIds] : winnerIds
+    const winnerSeat   = room.seats.find(s => s && s.id === winnerIdArr[0])
+    const boardStrings = room.engine.board.map(c => typeof c === 'string' ? c : c.rank + c.suit)
+
+    getHandCount(roomId).then(async (count) => {
+        const seats = room.seats
+            .map((s, idx) => s ? { seat: s, idx } : null)
+            .filter(Boolean) as { seat: Seat; idx: number }[]
+
+        await saveHand({
+            roomId,
+            handNumber:  count + 1,
+            pot:         room.pot,
+            board:       boardStrings,
+            winnerId:    winnerSeat?.address,
+            winnerName:  winnerSeat?.name,
+            winAmount:   winnerIdArr.length === 1 ? room.pot : Math.floor(room.pot / winnerIdArr.length),
+            winningHand: winnerSeat ? (winnerSeat as any).bestHand ?? undefined : undefined,
+            phase:       room.handState,
+            seats:       seats.map(({ seat, idx }) => ({
+                playerName:   seat.name,
+                seatIndex:    idx,
+                holeCards:    seat.holeCards.map((c: any) => typeof c === 'string' ? c : c.rank + c.suit),
+                startBalance: seat.balance + seat.currentBet,
+                endBalance:   seat.balance,
+                betTotal:     seat.currentBet,
+                action:       winnerIdArr.includes(seat.id) ? 'winner' : seat.lastAction.toLowerCase() || 'fold',
+                bestHand:     (seat as any).bestHand ?? undefined,
+            })),
+        }).catch(err => console.error('❌ Error guardando mano:', err))
+
+        // Stats del ganador
+        if (winnerSeat?.address) {
+            await recordWin(winnerSeat.address, room.pot).catch(() => {})
+            await upsertLeaderboard(winnerSeat.address, winnerSeat.name, room.pot, room.pot).catch(() => {})
+        }
+        // Stats de los perdedores
+        for (const { seat } of seats) {
+            if (!winnerIdArr.includes(seat.id) && seat.address) {
+                await recordLoss(seat.address, seat.currentBet).catch(() => {})
+            }
+        }
+    }).catch(err => console.error('❌ Error en DB endHand:', err))
+    // ─────────────────────────────────────────────────────────
 
     room.pot          = 0;
     room.currentBet   = 0;
@@ -636,6 +684,9 @@ export function registerGameHandlers(io: Server, socket: Socket) {
             lastRaiseSize: BIG_BLIND,
             actionInProgress: false,
         };
+        // Guardar sala en DB
+        dbCreateRoom(roomId, socket.id, type || 'free', visibility === 'public', SMALL_BLIND, BIG_BLIND)
+            .catch(err => console.error('❌ Error creando sala en DB:', err))
         joinClientToRoom(io, socket, roomId, address, name);
         updateGlobalLobby(io);
     });
@@ -669,6 +720,12 @@ export function registerGameHandlers(io: Server, socket: Socket) {
             sittingOut: false,
             raiseCount: 0,
         };
+
+        // Registrar jugador en DB
+        if (client.name) {
+            getOrCreateUser(client.address || client.name, client.name)
+                .catch(err => console.error('❌ Error registrando usuario:', err))
+        }
 
         io.to(roomId).emit('serverLog', { message: `🪙 ${client.name} se sentó en la mesa.`, type: 'log-info' });
         broadcastState(io, roomId);

@@ -40,17 +40,17 @@ export default function CreateRoom() {
   }
 
   const handleMatchmaking = () => {
-    safeEmit('requestMatchmaking', { name: playerName, address: userAddress || '' })
+    safeEmit('requestMatchmaking', { name: playerName, address: userAddress || playerName })
   }
 
   const handleCreate = () => {
-    safeEmit('createRoom', { name: playerName, type, visibility, address: userAddress || '' })
+    safeEmit('createRoom', { name: playerName, type, visibility, address: userAddress || playerName })
   }
 
   const handleJoin = () => {
     const code = joinCode.trim().toUpperCase()
     if (!code) return
-    safeEmit('joinRoom', { roomId: code, name: playerName, address: userAddress || '' })
+    safeEmit('joinRoom', { roomId: code, name: playerName, address: userAddress || playerName })
   }
 
   return (
